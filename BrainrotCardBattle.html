@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fantasy Card Pocket</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* --- 基本スタイル & アニメーション --- */
+  @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;900&display=swap');
+  
+  :root {
+    --app-height: 100vh;
+  }
+
+  body {
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    height: var(--app-height);
+    width: 100vw;
+    margin: 0;
+  }
+  
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* 画面切り替えフェード */
+  .screen {
+    display: none;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  .screen.active {
+    display: flex;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* カードの見た目 */
+  .card-wrap {
+    perspective: 1000px;
+    transform-style: preserve-3d;
+    transition: transform 0.2s;
+  }
+  .card-wrap:active { transform: scale(0.95); }
+  .card {
+    width: 100%;
+    aspect-ratio: 5 / 7;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+    border: 2px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* 属性別背景グラデーション */
+  .type-fire { background: linear-gradient(135deg, #ff7e5f, #feb47b); border-color: #ff4500; }
+  .type-water { background: linear-gradient(135deg, #4facfe, #00f2fe); border-color: #00bfff; }
+  .type-grass { background: linear-gradient(135deg, #43e97b, #38f9d7); border-color: #32cd32; }
+  .type-electric { background: linear-gradient(135deg, #f6d365, #fda085); border-color: #ffd700; }
+  .type-dark { background: linear-gradient(135deg, #718096, #2d3748); border-color: #4a5568; color: white;}
+  .type-light { background: linear-gradient(135deg, #e0c3fc, #8ec5fc); border-color: #ffb6c1; }
+  .type-normal { background: linear-gradient(135deg, #cfd9df, #e2ebf0); border-color: #a9a9a9; }
+
+  /* バトル用エフェクト */
+  @keyframes shake {
+    0% { transform: translate(1px, 1px) rotate(0deg); }
+    10% { transform: translate(-1px, -2px) rotate(-1deg); }
+    20% { transform: translate(-3px, 0px) rotate(1deg); }
+    30% { transform: translate(3px, 2px) rotate(0deg); }
+    40% { transform: translate(1px, -1px) rotate(1deg); }
+    50% { transform: translate(-1px, 2px) rotate(-1deg); }
+    60% { transform: translate(-3px, 1px) rotate(0deg); }
+    70% { transform: translate(3px, 1px) rotate(-1deg); }
+    80% { transform: translate(-1px, -1px) rotate(1deg); }
+    90% { transform: translate(1px, 2px) rotate(0deg); }
+    100% { transform: translate(1px, -2px) rotate(-1deg); }
+  }
+  .anim-shake { animation: shake 0.5s; }
+  
+  @keyframes attack-slide {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-30px) scale(1.1); }
+    100% { transform: translateY(0); }
+  }
+  .anim-attack { animation: attack-slide 0.3s ease-in-out; }
+  @keyframes attack-slide-cpu {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(30px) scale(1.1); }
+    100% { transform: translateY(0); }
+  }
+  .anim-attack-cpu { animation: attack-slide-cpu 0.3s ease-in-out; }
+
+  @keyframes flash-red {
+    0%, 100% { background-color: transparent; }
+    50% { background-color: rgba(255, 0, 0, 0.5); }
+  }
+  .anim-damage { animation: flash-red 0.4s; }
+
+  /* ヒットエフェクト */
+  .hit-effect {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 4rem;
+    pointer-events: none;
+    z-index: 100;
+    animation: blast 0.5s ease-out forwards;
+  }
+  @keyframes blast {
+    0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.5); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
+  }
+
+  /* コレクションブック */
+  .book-container {
+    perspective: 1200px;
+  }
+  .page {
+    transform-origin: left center;
+    transition: transform 0.6s cubic-bezier(0.645, 0.045, 0.355, 1);
+    transform-style: preserve-3d;
+  }
+  .page.turned {
+    transform: rotateY(-180deg);
+  }
+
+  /* パック開封 */
+  .pack-wrap {
+    transition: transform 0.3s, filter 0.3s;
+  }
+  .pack-wrap:active { transform: scale(0.9); }
+  @keyframes tear-open {
+    0% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
+    50% { clip-path: polygon(0 20%, 100% 0, 100% 100%, 0 100%); }
+    100% { clip-path: polygon(0 100%, 100% 100%, 100% 100%, 0 100%); opacity: 0; }
+  }
+  .anim-tear { animation: tear-open 1s forwards; }
+
+  /* バトルフィールド */
+  .battle-bg {
+    background-size: cover;
+    background-position: center;
+    transition: background-image 0.5s;
+  }
+  .zone-border { border: 2px dashed rgba(255,255,255,0.3); border-radius: 8px; }
+
+  /* 光る文字 */
+  .text-glow {
+    text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(255,255,255,0.5);
+  }
+</style>
+</head>
+<body class="bg-gray-900 text-white overflow-hidden flex justify-center items-center">
+
+<!-- アプリメインコンテナ (王道ファンタジー風背景) -->
+<div id="app" class="relative w-full h-full max-w-md bg-gray-800 shadow-2xl overflow-hidden flex flex-col battle-bg" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%\' height=\'100%\'><defs><linearGradient id=\'bg\' x1=\'0%\' y1=\'0%\' x2=\'100%\' y2=\'100%\'><stop offset=\'0%\' stop-color=\'%231a365d\'/><stop offset=\'100%\' stop-color=\'%232a4365\'/></linearGradient></defs><rect width=\'100%\' height=\'100%\' fill=\'url(%23bg)\'/></svg>');">
+  
+  <!-- トースト通知 -->
+  <div id="toast" class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-80 text-white px-4 py-2 rounded-full z-50 transition-opacity duration-300 opacity-0 pointer-events-none whitespace-nowrap text-sm font-bold">
+    Message
+  </div>
+
+  <!-- 1. タイトル画面 -->
+  <div id="screen-title" class="screen active flex-col justify-center items-center h-full w-full bg-black/60 absolute inset-0 z-40 backdrop-blur-sm">
+    <h1 class="text-4xl font-black text-center mb-4 text-glow leading-tight text-blue-300">FANTASY<br>CARD<br><span class="text-3xl text-yellow-400">POCKET</span></h1>
+    <div class="text-6xl mb-8 animate-bounce">⚔️🛡️</div>
+    <button onclick="nav('home')" class="bg-yellow-500 text-black font-bold text-xl py-3 px-10 rounded-full shadow-[0_0_15px_rgba(255,255,0,0.5)] border-b-4 border-yellow-700 active:border-b-0 active:translate-y-1 transition-all">冒険を始める</button>
+  </div>
+
+  <!-- 2. ホーム画面 -->
+  <div id="screen-home" class="screen flex-col h-full w-full absolute inset-0 z-30 bg-black/40 backdrop-blur-md">
+    <div class="bg-black/60 p-4 flex justify-between items-center shadow-md border-b border-gray-700">
+      <div class="font-bold text-xl flex items-center gap-2"><span>👤</span> <span id="player-name">Player</span></div>
+      <div class="flex gap-4">
+        <div class="flex items-center gap-1 text-yellow-400 font-bold"><span>🪙</span> <span id="coin-count">1000</span></div>
+      </div>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-4 pb-24">
+      <div onclick="nav('pack')" class="bg-gradient-to-br from-blue-600 to-indigo-800 rounded-2xl p-6 flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform border border-blue-400">
+        <div class="text-5xl mb-2">📦</div>
+        <div class="font-bold text-lg">パック開封</div>
+      </div>
+      <div onclick="nav('deck')" class="bg-gradient-to-br from-green-600 to-teal-800 rounded-2xl p-6 flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform border border-green-400">
+        <div class="text-5xl mb-2">🗂️</div>
+        <div class="font-bold text-lg">デッキ編成</div>
+      </div>
+      <div onclick="nav('battle-setup')" class="bg-gradient-to-br from-red-600 to-rose-800 rounded-2xl p-6 flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform col-span-2 border border-red-400">
+        <div class="text-6xl mb-2">⚔️</div>
+        <div class="font-bold text-2xl">アリーナバトル</div>
+        <div class="text-sm opacity-80">CPU対戦 Lv1〜15</div>
+      </div>
+      <div onclick="nav('collection')" class="bg-gradient-to-br from-yellow-600 to-orange-800 rounded-2xl p-6 flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform border border-yellow-400">
+        <div class="text-5xl mb-2">📖</div>
+        <div class="font-bold text-lg">カード図鑑</div>
+      </div>
+      <div onclick="nav('settings')" class="bg-gradient-to-br from-gray-600 to-gray-800 rounded-2xl p-6 flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform border border-gray-400">
+        <div class="text-5xl mb-2">⚙️</div>
+        <div class="font-bold text-lg">設定</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. パック開封画面 -->
+  <div id="screen-pack" class="screen flex-col h-full w-full absolute inset-0 z-30 bg-gray-900">
+    <div class="p-4 flex items-center justify-between bg-gray-800 border-b border-gray-700">
+      <button onclick="nav('home')" class="text-xl text-blue-300">◀ 戻る</button>
+      <h2 class="font-bold text-xl">ショップ</h2>
+      <div class="text-yellow-400 font-bold">🪙 <span id="pack-coins">1000</span></div>
+    </div>
+    
+    <div id="pack-selection" class="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+      <h3 class="text-2xl font-bold text-center">開けるパックを選ぼう<br><span class="text-sm text-gray-400">1パック: 100🪙 / 5枚入り</span></h3>
+      
+      <div class="flex gap-4 w-full overflow-x-auto hide-scrollbar snap-x py-4 px-8">
+        <div onclick="openPack('fire')" class="pack-wrap snap-center shrink-0 w-48 h-72 bg-gradient-to-b from-red-600 to-red-900 rounded-xl border-4 border-red-300 shadow-[0_0_20px_rgba(255,0,0,0.5)] flex flex-col items-center justify-center relative cursor-pointer">
+          <div class="text-6xl mb-4">🔥</div>
+          <div class="font-black text-2xl tracking-widest text-center leading-tight">紅蓮の<br>咆哮</div>
+          <div class="absolute bottom-4 bg-black bg-opacity-50 px-3 py-1 rounded-full text-xs">🔥水草雷 中心</div>
+        </div>
+        <div onclick="openPack('dark')" class="pack-wrap snap-center shrink-0 w-48 h-72 bg-gradient-to-b from-purple-800 to-black rounded-xl border-4 border-purple-300 shadow-[0_0_20px_rgba(128,0,128,0.5)] flex flex-col items-center justify-center relative cursor-pointer">
+          <div class="text-6xl mb-4">🌌</div>
+          <div class="font-black text-2xl tracking-widest text-white text-center leading-tight">深淵の<br>目覚め</div>
+          <div class="absolute bottom-4 bg-black bg-opacity-50 px-3 py-1 rounded-full text-xs text-white">🌌光無 中心</div>
+        </div>
+        <div onclick="openPack('legend')" class="pack-wrap snap-center shrink-0 w-48 h-72 bg-gradient-to-b from-yellow-300 to-yellow-600 rounded-xl border-4 border-white shadow-[0_0_20px_rgba(255,255,0,0.8)] flex flex-col items-center justify-center relative cursor-pointer">
+          <div class="text-6xl mb-4">👑</div>
+          <div class="font-black text-2xl tracking-widest text-black text-center leading-tight">伝説の<br>英雄たち</div>
+          <div class="absolute bottom-4 bg-black bg-opacity-50 px-3 py-1 rounded-full text-xs text-white">ALL MIX & レア高</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 開封演出エリア -->
+    <div id="pack-opening" class="hidden absolute inset-0 bg-black z-50 flex-col items-center justify-center pb-10">
+      <div id="pack-tear-target" class="w-64 h-96 bg-blue-600 rounded-xl border-4 border-white shadow-2xl flex items-center justify-center relative">
+         <div class="text-8xl">📦</div>
+         <div class="absolute top-0 w-full h-8 bg-gray-300 opacity-50 flex justify-center items-center"><span class="text-xs text-black font-bold">SWIPE TO OPEN</span></div>
+      </div>
+      <p id="pack-instruction" class="mt-8 text-xl animate-pulse font-bold text-blue-400">タップしてパックを開ける！</p>
+      
+      <div id="pulled-cards-area" class="hidden w-full h-full flex flex-col items-center justify-center">
+        <h3 class="text-2xl font-bold mb-4 text-yellow-400 text-glow">NEW CARDS!</h3>
+        <div id="pulled-cards-container" class="flex flex-wrap justify-center gap-2 p-4 w-full"></div>
+        <button onclick="endPackOpening()" class="mt-8 bg-white text-black px-8 py-3 rounded-full font-bold">完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. デッキ編成画面 -->
+  <div id="screen-deck" class="screen flex-col h-full w-full absolute inset-0 z-30 bg-gray-900">
+    <div class="p-4 flex items-center justify-between bg-gray-800 border-b border-gray-700 shrink-0">
+      <button onclick="saveDeckAndNav('home')" class="text-xl text-blue-300">◀ 戻る</button>
+      <h2 class="font-bold text-xl">デッキ編成</h2>
+      <div id="deck-count" class="text-green-400 font-bold">0/20</div>
+    </div>
+    
+    <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <!-- 現在のデッキ (上部・高さ固定) -->
+      <div class="h-44 bg-gray-800 p-2 overflow-y-auto border-b border-gray-700 shrink-0 relative">
+        <div class="text-xs text-gray-400 mb-1 sticky top-0 bg-gray-800 z-10 p-1">現在のデッキ (タップで外す)</div>
+        <div id="current-deck-list" class="flex flex-wrap gap-2"></div>
+      </div>
+      
+      <!-- 所持カード (下部・スクロール領域) -->
+      <div class="flex-1 p-2 overflow-y-auto relative min-h-0 bg-gray-900">
+        <div class="flex justify-between items-center mb-2 sticky top-0 bg-gray-900 z-10 py-1">
+          <div class="text-xs text-gray-400">所持カード (タップで追加)</div>
+          <select id="deck-filter" class="bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600" onchange="renderDeckBuilder()">
+            <option value="all">すべて</option>
+            <option value="fire">🔥 炎</option>
+            <option value="water">💧 水</option>
+            <option value="grass">🌿 草</option>
+            <option value="electric">⚡ 雷</option>
+            <option value="dark">🌌 闇</option>
+            <option value="light">✨ 光</option>
+            <option value="normal">⚪ 無</option>
+          </select>
+        </div>
+        <div id="collection-deck-list" class="grid grid-cols-4 sm:grid-cols-5 gap-2 pb-24"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. コレクション画面 (本をめくる) -->
+  <div id="screen-collection" class="screen flex-col h-full w-full absolute inset-0 z-30 bg-blue-900">
+    <div class="p-4 flex items-center justify-between bg-blue-950 shadow-md z-10 shrink-0">
+      <button onclick="nav('home')" class="text-xl text-blue-300">◀ 戻る</button>
+      <h2 class="font-bold text-xl">カード図鑑</h2>
+      <div class="text-sm">収集率: <span id="collection-rate">0</span>%</div>
+    </div>
+    
+    <div class="flex-1 flex items-center justify-center p-4 pb-24 relative perspective-1000 min-h-0">
+      <div id="book-area" class="w-full max-w-sm aspect-[3/4] bg-gray-100 rounded-r-2xl shadow-2xl relative book-container flex border-l-8 border-blue-950">
+        <!-- JSでページを生成 -->
+      </div>
+      
+      <div class="absolute bottom-8 w-full flex justify-between px-8 z-20 pointer-events-none">
+        <button onclick="prevPage()" class="pointer-events-auto bg-black bg-opacity-50 w-12 h-12 rounded-full flex items-center justify-center text-2xl active:scale-90 transition border border-gray-500">◀</button>
+        <button onclick="nextPage()" class="pointer-events-auto bg-black bg-opacity-50 w-12 h-12 rounded-full flex items-center justify-center text-2xl active:scale-90 transition border border-gray-500">▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. バトル準備画面 (CPUレベル選択) -->
+  <div id="screen-battle-setup" class="screen flex-col h-full w-full absolute inset-0 z-30 bg-gray-900 backdrop-blur">
+    <div class="p-4 flex items-center justify-between bg-gray-800 shrink-0 border-b border-gray-700">
+      <button onclick="nav('home')" class="text-xl text-blue-300">◀ 戻る</button>
+      <h2 class="font-bold text-xl">アリーナ</h2>
+      <div></div>
+    </div>
+    
+    <div class="flex-1 flex flex-col items-center p-6 gap-6 overflow-y-auto pb-24 min-h-0">
+      <div class="w-full bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-600 shrink-0">
+        <h3 class="text-lg font-bold mb-2 text-center text-green-400">現在のデッキ</h3>
+        <div id="setup-deck-preview" class="flex gap-1 overflow-x-auto hide-scrollbar pb-2"></div>
+        <button onclick="nav('deck')" class="mt-2 w-full py-2 bg-gray-700 rounded text-sm border border-gray-500">デッキを編集する</button>
+      </div>
+
+      <h3 class="text-2xl font-bold mt-4 shrink-0 text-red-400">対戦相手を選択</h3>
+      <div class="w-full grid grid-cols-1 gap-3" id="cpu-list">
+        <!-- JSで生成 Lv1〜15 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. バトル画面 (ポケポケルール準拠) -->
+  <div id="screen-battle" class="screen flex-col h-full w-full absolute inset-0 z-50 bg-gray-900 battle-bg">
+    
+    <div id="battle-effect-layer" class="absolute inset-0 pointer-events-none z-50 overflow-hidden"></div>
+    
+    <div id="battle-result" class="hidden absolute inset-0 bg-black bg-opacity-90 z-50 flex-col items-center justify-center">
+      <h1 id="result-title" class="text-6xl font-black mb-4">VICTORY!</h1>
+      <p id="result-reward" class="text-2xl text-yellow-400 mb-8">+ 100🪙</p>
+      <button onclick="endBattle()" class="bg-blue-600 text-white font-bold py-3 px-8 rounded-full text-xl border-2 border-blue-400">戻る</button>
+    </div>
+
+    <!-- 上部: 相手の場 -->
+    <div class="h-[35%] w-full flex flex-col justify-between p-2 relative bg-gradient-to-b from-black/80 to-transparent">
+      <div class="flex justify-between items-start">
+        <div class="flex gap-1" id="cpu-points">
+          <div class="w-4 h-6 bg-red-500 rounded-sm border border-red-700 shadow-sm"></div>
+          <div class="w-4 h-6 bg-red-500 rounded-sm border border-red-700 shadow-sm"></div>
+          <div class="w-4 h-6 bg-red-500 rounded-sm border border-red-700 shadow-sm"></div>
+        </div>
+        <div class="text-center bg-black/70 px-3 py-1 rounded-full text-xs border border-gray-500 flex flex-col items-center">
+          <span class="text-red-400 font-bold" id="cpu-name-disp">CPU Lv.1</span>
+          <span class="text-gray-300">手札: <span id="cpu-hand-count">5</span>枚 | 山札: <span id="cpu-deck-count">15</span></span>
+        </div>
+        <div class="flex flex-col items-end gap-1" id="cpu-energy-zone"></div>
+      </div>
+      
+      <div class="flex justify-center items-end h-full pb-2 gap-4">
+        <!-- 相手ベンチ -->
+        <div class="flex gap-2 items-end w-1/3 justify-end pr-2" id="cpu-bench">
+          <div class="w-12 h-16 zone-border bg-black/40"></div>
+          <div class="w-12 h-16 zone-border bg-black/40"></div>
+          <div class="w-12 h-16 zone-border bg-black/40"></div>
+        </div>
+        <!-- 相手バトル場 -->
+        <div class="w-20 h-28 zone-border bg-black/50 relative flex justify-center items-center shadow-[0_0_15px_rgba(255,0,0,0.3)]" id="cpu-active">
+           <div class="text-gray-500 text-xs font-bold">BATTLE</div>
+        </div>
+        <div class="w-1/3"></div>
+      </div>
+    </div>
+
+    <!-- 中央: ステータス/UI -->
+    <div class="h-[10%] w-full flex justify-between items-center px-4 bg-black/60 border-y border-gray-600 backdrop-blur-sm z-10 relative">
+      <div id="turn-indicator" class="font-bold text-xl text-green-400 text-glow">PLAYER TURN</div>
+      <div class="flex gap-2">
+        <button id="btn-retreat" class="bg-gray-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50 border border-gray-400" onclick="actionRetreat()">逃げる</button>
+        <button id="btn-end-turn" class="bg-blue-600 text-white px-4 py-1 rounded font-bold shadow border border-blue-400" onclick="actionEndTurn()">ターン終了</button>
+      </div>
+    </div>
+
+    <!-- 下部: 自分の場 -->
+    <div class="h-[55%] w-full flex flex-col p-2 pb-6 relative bg-gradient-to-t from-black/90 to-transparent">
+      
+      <div class="flex justify-center items-start h-1/2 pt-2 gap-4">
+        <div class="w-1/3 flex flex-col items-start gap-1" id="player-energy-zone"></div>
+        <!-- 自分のバトル場 -->
+        <div class="w-24 h-32 zone-border bg-black/50 relative flex justify-center items-center shrink-0 shadow-[0_0_15px_rgba(0,100,255,0.3)]" id="player-active" onclick="selectZone('active')">
+          <div class="text-gray-500 text-sm font-bold">BATTLE</div>
+        </div>
+        <!-- 自分のベンチ -->
+        <div class="flex gap-2 items-start w-1/3 pl-2 shrink-0" id="player-bench">
+          <div class="w-14 h-20 zone-border bg-black/40" onclick="selectZone('bench0')"></div>
+          <div class="w-14 h-20 zone-border bg-black/40" onclick="selectZone('bench1')"></div>
+          <div class="w-14 h-20 zone-border bg-black/40" onclick="selectZone('bench2')"></div>
+        </div>
+      </div>
+
+      <!-- 手札 / アクション -->
+      <div class="flex-1 mt-2 flex flex-col justify-end relative min-h-0">
+        <div class="absolute top-0 left-0 text-xs text-gray-300 bg-black/50 px-2 rounded border border-gray-600">山札: <span id="player-deck-count">15</span></div>
+        <div class="absolute top-0 right-0 flex gap-1" id="player-points">
+          <div class="w-4 h-6 bg-blue-500 rounded-sm border border-blue-700 shadow-sm"></div>
+          <div class="w-4 h-6 bg-blue-500 rounded-sm border border-blue-700 shadow-sm"></div>
+          <div class="w-4 h-6 bg-blue-500 rounded-sm border border-blue-700 shadow-sm"></div>
+        </div>
+
+        <div id="action-menu" class="hidden absolute -top-16 left-1/2 transform -translate-x-1/2 bg-gray-800 border border-gray-400 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.8)] p-2 flex gap-2 z-20"></div>
+
+        <div class="flex justify-center gap-[-10px] overflow-x-visible pb-2 px-4" id="player-hand"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. 設定画面 -->
+  <div id="screen-settings" class="screen flex-col h-full w-full absolute inset-0 z-30 bg-gray-900">
+    <div class="p-4 flex items-center bg-gray-800 shadow-md shrink-0 border-b border-gray-700">
+      <button onclick="nav('home')" class="text-xl text-blue-300">◀ 戻る</button>
+      <h2 class="font-bold text-xl ml-4">設定</h2>
+    </div>
+    <div class="flex-1 p-6 overflow-y-auto flex flex-col gap-6 pb-24 min-h-0">
+      <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+        <h3 class="font-bold text-lg mb-2">プレイヤー名</h3>
+        <input type="text" id="input-player-name" class="w-full bg-gray-700 text-white rounded p-2 border border-gray-600" value="Player">
+        <button onclick="saveName()" class="mt-2 bg-blue-600 px-4 py-2 rounded w-full font-bold">保存</button>
+      </div>
+
+      <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+        <h3 class="font-bold text-lg mb-2">バトル背景カスタム</h3>
+        <p class="text-sm text-gray-400 mb-2">画像をアップロードして背景を変更</p>
+        <input type="file" id="upload-bg" accept="image/*" class="text-sm text-gray-300">
+        <button onclick="resetBg()" class="mt-4 bg-gray-600 px-4 py-2 rounded w-full text-sm font-bold">背景をデフォルトに戻す</button>
+      </div>
+      
+      <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+        <h3 class="font-bold text-lg mb-2">デッキケースカスタム</h3>
+        <p class="text-sm text-gray-400 mb-2">カードの裏面（スリーブ）画像を変更</p>
+        <input type="file" id="upload-sleeve" accept="image/*" class="text-sm text-gray-300">
+        <button onclick="resetSleeve()" class="mt-4 bg-gray-600 px-4 py-2 rounded w-full text-sm font-bold">スリーブをデフォルトに戻す</button>
+      </div>
+
+      <div class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+        <h3 class="font-bold text-lg text-red-500 mb-2">データ初期化</h3>
+        <button onclick="resetData()" class="bg-red-800 text-white px-4 py-2 rounded w-full font-bold border border-red-600">全データを消去する</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ========================================================================
+   画面の高さ自動調整 (スマイルゼミ等のブラウザバー対策)
+======================================================================== */
+function setAppHeight() {
+  document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+}
+window.addEventListener('resize', setAppHeight);
+
+/* ========================================================================
+   データベース: Fantasy Card Pocket 100種類
+   属性: fire, water, grass, electric, dark, light, normal
+======================================================================== */
+const TYPES = {
+  FIRE: 'fire', WATER: 'water', GRASS: 'grass', 
+  ELECTRIC: 'electric', DARK: 'dark', LIGHT: 'light', NORMAL: 'normal'
+};
+
+// ★エラーにならないようにするプレースホルダー付き画像生成関数
+// スマイルゼミの環境で画像が見つからない場合、ファイル名が表示されるように調整しています
+function imgTemplate(filename, altName) {
+  // onerror のクォーテーション競合を防ぐため、文字列連結を工夫しています。
+  return `<img src="${filename}" alt="${altName}" class="w-full h-full object-cover rounded" onerror="this.outerHTML='<div class=\\'w-full h-full flex flex-col items-center justify-center bg-gray-200 text-gray-800 text-[8px] leading-tight p-1 text-center font-bold break-all border border-gray-400 rounded\\'><span>' + this.alt + '</span></div>'">`;
+}
+
+const CARD_DB = [
+  // --- パート1〜6: ユーザー指定の正確なファイル名を適用 ---
+  { id: 1, name: "ラ・ヴァッカ・サトゥルノ・サトゥルニータ", image: imgTemplate("ラ・ヴァッカ・サトゥルノ・サトゥルニータ（La-Vacca-Saturno-Saturnita）.webp", "ラ・ヴァッカ・サトゥルノ・サトゥルニータ"), type: TYPES.NORMAL, hp: 80, stage: 0, weakness: TYPES.DARK, retreat: 2,
+    attacks: [{name: "たいあたり", dmg: 20, cost: 1, effect: ""}, {name: "すてみタックル", dmg: 40, cost: 3, effect: ""}] },
+  { id: 2, name: "ジョブ-ジョブ-ジョブ・サフール", image: imgTemplate("ジョブ-ジョブ-ジョブ・サフール（Job-Job-Job-Sahur）.webp", "ジョブ-ジョブ-ジョブ・サフール"), type: TYPES.DARK, hp: 90, stage: 0, weakness: TYPES.LIGHT, retreat: 2,
+    attacks: [{name: "ひっかく", dmg: 30, cost: 2, effect: ""}, {name: "やみうち", dmg: 70, cost: 4, effect: "discard1"}] },
+  { id: 3, name: "テテテ・サフール", image: imgTemplate("テテテ・サフール（Te-Te-Te-Sahur）-1.jpg", "テテテ・サフール"), type: TYPES.DARK, hp: 60, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "つつく", dmg: 10, cost: 1, effect: ""}, {name: "ふいうち", dmg: 30, cost: 2, effect: ""}] },
+  { id: 4, name: "タタタ-・サフール", image: imgTemplate("タタタ-・サフール（Ta-Ta-Ta-Sahur）.jpg", "タタタ-・サフール"), type: TYPES.DARK, hp: 70, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "たいあたり", dmg: 20, cost: 1, effect: ""}, {name: "かみつく", dmg: 40, cost: 2, effect: ""}] },
+  { id: 5, name: "トゥン-トゥン-トゥン・サフール", image: imgTemplate("トゥン-トゥン-トゥン・サフール（Tung-Tung-Tung-Sahur）.jpg", "トゥン-トゥン-トゥン・サフール"), type: TYPES.DARK, hp: 80, stage: 0, weakness: TYPES.LIGHT, retreat: 2,
+    attacks: [{name: "のしかかり", dmg: 20, cost: 2, effect: ""}, {name: "メガトンパンチ", dmg: 50, cost: 3, effect: ""}] },
+  { id: 6, name: "トリッパ・トロッパ・トラララ・リリリ・リラ・トゥントゥン・サフール・ボネカ・トゥントゥン・トララレロ・トリッピ・トロッパ・クロコディーナ", image: imgTemplate("トリッパ・トロッパ・トラララ・リリリ・リラ・トゥントゥン・サフール・ボネカ・トゥントゥン・トララレロ・トリッピ・トロッパ・クロコディーナ-561x1024.jpg", "トリッパ・トロッパ・トラララ・リリリ・リラ・トゥントゥン・サフール・ボネカ・トゥントゥン・トララレロ・トリッピ・トロッパ・クロコディーナ"), type: TYPES.GRASS, hp: 150, stage: 0, weakness: TYPES.FIRE, retreat: 4,
+    attacks: [{name: "はっぱカッター", dmg: 40, cost: 3, effect: ""}, {name: "ソーラービーム", dmg: 120, cost: 5, effect: "discard2"}] },
+  { id: 7, name: "ラ・シークレット・コンビナシオン", image: imgTemplate("ラ・シークレット・コンビナシオン（La-Secret-Combinasion）-1.webp", "ラ・シークレット・コンビナシオン"), type: TYPES.ELECTRIC, hp: 100, stage: 0, weakness: TYPES.NORMAL, retreat: 2,
+    attacks: [{name: "でんきショック", dmg: 30, cost: 2, effect: ""}, {name: "かみなり", dmg: 80, cost: 4, effect: ""}] },
+  { id: 8, name: "ロス・アミーゴス", image: imgTemplate("ロス・アミーゴス（Los-Amigos）.webp", "ロス・アミーゴス"), type: TYPES.NORMAL, hp: 110, stage: 0, weakness: TYPES.DARK, retreat: 2,
+    attacks: [{name: "てだすけ", dmg: 20, cost: 1, effect: "heal20"}, {name: "とっしん", dmg: 60, cost: 3, effect: ""}] },
+  { id: 9, name: "ポット・ホットスポット", image: imgTemplate("ポット・ホットスポット（Pot-Hotspot）.jpg", "ポット・ホットスポット"), type: TYPES.FIRE, hp: 90, stage: 0, weakness: TYPES.WATER, retreat: 3,
+    attacks: [{name: "かたくなる", dmg: 0, cost: 1, effect: "heal20"}, {name: "かえんほうしゃ", dmg: 50, cost: 3, effect: ""}] },
+  { id: 10, name: "ノー・マイ・ホットスポット", image: imgTemplate("ノー・マイ・ホットスポット（Nooo-My-Hotspot）.webp", "ノー・マイ・ホットスポット"), type: TYPES.FIRE, hp: 70, stage: 0, weakness: TYPES.WATER, retreat: 1,
+    attacks: [{name: "ひのこ", dmg: 20, cost: 1, effect: ""}, {name: "ニトロチャージ", dmg: 60, cost: 3, effect: "self10"}] },
+  
+  { id: 11, name: "カプチーノ・アサシーノ", image: imgTemplate("カプチーノ・アサシーノ（Cappuccino-Assassino）.webp", "カプチーノ・アサシーノ"), type: TYPES.DARK, hp: 80, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "どくのこな", dmg: 20, cost: 1, effect: ""}, {name: "アサシンダガー", dmg: 50, cost: 3, effect: ""}] },
+  { id: 12, name: "チンパンジーニ・バナニーニ", image: imgTemplate("チンパンジーニ・バナニーニ（Chimpanzini-Bananini）.jpg", "チンパンジーニ・バナニーニ"), type: TYPES.NORMAL, hp: 70, stage: 0, weakness: TYPES.DARK, retreat: 1,
+    attacks: [{name: "ひっかく", dmg: 10, cost: 1, effect: ""}, {name: "あばれる", dmg: 40, cost: 2, effect: ""}] },
+  { id: 13, name: "ボンバルディーロ・クロコディロ", image: imgTemplate("ボンバルディーロ・クロコディロ（Bombardiro-Crocodillo）.jpg", "ボンバルディーロ・クロコディロ"), type: TYPES.FIRE, hp: 120, stage: 0, weakness: TYPES.WATER, retreat: 3,
+    attacks: [{name: "かみくだく", dmg: 30, cost: 2, effect: ""}, {name: "だいばくはつ", dmg: 80, cost: 4, effect: ""}] },
+  { id: 14, name: "リリリ・ラリラ", image: imgTemplate("リリリ・ラリラ（Lirili-Larila）-1.jpeg", "リリリ・ラリラ"), type: TYPES.LIGHT, hp: 60, stage: 0, weakness: TYPES.DARK, retreat: 1,
+    attacks: [{name: "フラッシュ", dmg: 20, cost: 1, effect: ""}, {name: "マジカルシャイン", dmg: 40, cost: 2, effect: ""}] },
+  { id: 15, name: "ブルル・ブルル・パタピム", image: imgTemplate("ブルル・ブルル・パタピム（Brr-Brr-Patapim）.jpg", "ブルル・ブルル・パタピム"), type: TYPES.ELECTRIC, hp: 90, stage: 0, weakness: TYPES.NORMAL, retreat: 2,
+    attacks: [{name: "スパーク", dmg: 20, cost: 1, effect: ""}, {name: "ほうでん", dmg: 60, cost: 3, effect: ""}] },
+  { id: 16, name: "ボブリート・バンディート", image: imgTemplate("ボブリート・バンディート（Bobrito-Bandito）-1.webp", "ボブリート・バンディート"), type: TYPES.DARK, hp: 100, stage: 0, weakness: TYPES.LIGHT, retreat: 2,
+    attacks: [{name: "どろぼう", dmg: 30, cost: 2, effect: ""}, {name: "つじぎり", dmg: 70, cost: 4, effect: "discard1"}] },
+  { id: 17, name: "トリッピ・トロッピ", image: imgTemplate("トリッピ・トロッピ（Trippi-Troppi）.jpg", "トリッピ・トロッピ"), type: TYPES.WATER, hp: 80, stage: 0, weakness: TYPES.ELECTRIC, retreat: 1,
+    attacks: [{name: "みずでっぽう", dmg: 10, cost: 1, effect: ""}, {name: "なみのり", dmg: 40, cost: 3, effect: ""}] },
+  { id: 18, name: "ウ-ディン-ディン-ディン-ディン-ドゥン-マ-ディン-ディン-ディン-ドゥン", image: imgTemplate("ウ-ディン-ディン-ディン-ディン-ドゥン-マ-ディン-ディン-ディン-ドゥン（U-Din-Din-Din-Din-Dun-Ma-Din-Din-Din-Dun）.webp", "ウ-ディン-ディン-ディン-ディン-ドゥン-マ-ディン-ディン-ディン-ドゥン"), type: TYPES.NORMAL, hp: 150, stage: 0, weakness: TYPES.DARK, retreat: 4,
+    attacks: [{name: "ふみつけ", dmg: 40, cost: 3, effect: ""}, {name: "じしん", dmg: 110, cost: 5, effect: ""}] },
+  { id: 19, name: "ボネカ・アンバラブ", image: imgTemplate("ボネカ・アンバラブ（Boneca-Ambalabu）-1.jpg", "ボネカ・アンバラブ"), type: TYPES.GRASS, hp: 110, stage: 0, weakness: TYPES.FIRE, retreat: 3,
+    attacks: [{name: "つるのムチ", dmg: 30, cost: 2, effect: ""}, {name: "ウッドホーン", dmg: 80, cost: 4, effect: ""}] },
+  { id: 20, name: "フリゴ・カメロ", image: imgTemplate("フリゴ・カメロ（Frigo-Camelo）-1.jpg", "フリゴ・カメロ"), type: TYPES.WATER, hp: 130, stage: 0, weakness: TYPES.ELECTRIC, retreat: 4,
+    attacks: [{name: "れいとうビーム", dmg: 40, cost: 3, effect: ""}, {name: "ふぶき", dmg: 90, cost: 4, effect: "heal20"}] },
+
+  { id: 21, name: "ゴリロ・ウォーターメロン・ドリロ", image: imgTemplate("16-ゴリロ・ウォーターメロン・ドリロ（Gorillo-Watermelondrillo）.webp", "ゴリロ・ウォーターメロン・ドリロ"), type: TYPES.GRASS, hp: 140, stage: 0, weakness: TYPES.FIRE, retreat: 4,
+    attacks: [{name: "タネマシンガン", dmg: 40, cost: 3, effect: ""}, {name: "リーフストーム", dmg: 100, cost: 5, effect: ""}] },
+  { id: 22, name: "サファイア-サファイア-サファイア・サフール", image: imgTemplate("サファイア-サファイア-サファイア・サフール（Sapphire-Sapphire-Sapphire-Sahur）-1.webp", "サファイア-サファイア-サファイア・サフール"), type: TYPES.LIGHT, hp: 90, stage: 0, weakness: TYPES.DARK, retreat: 2,
+    attacks: [{name: "ひかりのかべ", dmg: 20, cost: 1, effect: "heal10"}, {name: "ラスターカノン", dmg: 60, cost: 3, effect: ""}] },
+  { id: 23, name: "カーケル・サフール", image: imgTemplate("カーケル・サフール（Karker-Sahur）.jpg", "カーケル・サフール"), type: TYPES.DARK, hp: 80, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "おどろかす", dmg: 10, cost: 1, effect: ""}, {name: "シャドーボール", dmg: 50, cost: 3, effect: "self10"}] },
+  { id: 24, name: "サフール-サフール-サフール・カー", image: imgTemplate("サフール-サフール-サフール・カー（Sahur-Sahur-Sahur-Kur）.webp", "サフール-サフール-サフール・カー"), type: TYPES.NORMAL, hp: 120, stage: 0, weakness: TYPES.DARK, retreat: 3,
+    attacks: [{name: "とっしん", dmg: 30, cost: 2, effect: ""}, {name: "ギガインパクト", dmg: 80, cost: 4, effect: ""}] },
+  { id: 25, name: "サフィリ・サフール", image: imgTemplate("サフィリ・サフール（Saphiri-Sahur）.jpeg", "サフィリ・サフール"), type: TYPES.WATER, hp: 70, stage: 0, weakness: TYPES.ELECTRIC, retreat: 1,
+    attacks: [{name: "アクアジェット", dmg: 20, cost: 1, effect: ""}, {name: "たきのぼり", dmg: 40, cost: 2, effect: ""}] },
+  { id: 26, name: "カプチーノ・ギャングスターノ", image: imgTemplate("カプチーノ・ギャングスターノ（Cappuchino-Gangsterino）.jpg", "カプチーノ・ギャングスターノ"), type: TYPES.DARK, hp: 110, stage: 0, weakness: TYPES.LIGHT, retreat: 2,
+    attacks: [{name: "にらみつける", dmg: 20, cost: 1, effect: ""}, {name: "じごくづき", dmg: 70, cost: 3, effect: "discard1"}] },
+  { id: 27, name: "カプチーナ・アサシーナ", image: imgTemplate("カプチーナ・アサシーナ（Cappuccina-Assassinna）-1.jpg", "カプチーナ・アサシーナ"), type: TYPES.FIRE, hp: 90, stage: 0, weakness: TYPES.WATER, retreat: 1,
+    attacks: [{name: "ほのおのうず", dmg: 30, cost: 2, effect: ""}, {name: "れんごく", dmg: 60, cost: 3, effect: ""}] },
+  { id: 28, name: "ティグルリ・グレープフルトゥンニ", image: imgTemplate("ティグルリ・グレープフルトゥンニ（Tigrulli-Grapefrutunni）.webp", "ティグルリ・グレープフルトゥンニ"), type: TYPES.GRASS, hp: 100, stage: 0, weakness: TYPES.FIRE, retreat: 2,
+    attacks: [{name: "すいとる", dmg: 20, cost: 1, effect: ""}, {name: "ギガドレイン", dmg: 50, cost: 3, effect: ""}] },
+  { id: 29, name: "トララレロ・トラララ", image: imgTemplate("トララレロ・トラララ（Tralalero-Tralala）-1.jpg", "トララレロ・トラララ"), type: TYPES.ELECTRIC, hp: 80, stage: 0, weakness: TYPES.NORMAL, retreat: 1,
+    attacks: [{name: "チャージビーム", dmg: 10, cost: 1, effect: ""}, {name: "10まんボルト", dmg: 60, cost: 3, effect: ""}] },
+  { id: 30, name: "バレリーナ・カプチーナ", image: imgTemplate("バレリーナ・カプチーナ（Ballerina-Cappucappu）.webp", "バレリーナ・カプチーナ"), type: TYPES.WATER, hp: 70, stage: 0, weakness: TYPES.ELECTRIC, retreat: 1,
+    attacks: [{name: "アクアリング", dmg: 20, cost: 1, effect: "heal10"}, {name: "ハイドロポンプ", dmg: 40, cost: 2, effect: ""}] },
+
+  { id: 31, name: "ニンテンドーロ・アンド・プレイステンドーロ", image: imgTemplate("ニンテンドーロ・アンド・プレイステンドーロ（Nintendoro-and-Playstendoro）.webp", "ニンテンドーロ・アンド・プレイステンドーロ"), type: TYPES.ELECTRIC, hp: 100, stage: 0, weakness: TYPES.WATER, retreat: 2,
+    attacks: [{name: "でんじは", dmg: 30, cost: 2, effect: ""}, {name: "かみなり", dmg: 80, cost: 4, effect: ""}] },
+  { id: 32, name: "ケチュル・アンド・ムストゥル", image: imgTemplate("ケチュル・アンド・ムストゥル（Ketchuru-and-Musturu）.jpg", "ケチュル・アンド・ムストゥル"), type: TYPES.FIRE, hp: 70, stage: 0, weakness: TYPES.WATER, retreat: 1,
+    attacks: [{name: "ひのこ", dmg: 20, cost: 1, effect: ""}, {name: "かえんほうしゃ", dmg: 40, cost: 2, effect: ""}] },
+  { id: 33, name: "バーガロ・アンドフライヤロ", image: imgTemplate("バーガロ・アンドフライヤロ（Burguro-and-Fryuro）.webp", "バーガロ・アンドフライヤロ"), type: TYPES.NORMAL, hp: 120, stage: 0, weakness: TYPES.DARK, retreat: 3,
+    attacks: [{name: "のみこむ", dmg: 40, cost: 2, effect: "heal10"}, {name: "のしかかり", dmg: 90, cost: 4, effect: ""}] },
+  { id: 34, name: "ガラマラランブララマンマララマン・ダン・マドゥドゥンドゥン・タク・トゥントゥン・ペルクントゥン", image: imgTemplate("ガラマラランブララマンマララマン・ダン・マドゥドゥンドゥン・タク・トゥントゥン・ペルクントゥン（Garamararambraramanmararaman-dan-Madudungdung-tak-tuntung-perkuntung）-1.jpg", "ガラマラランブララマンマララマン・ダン・マドゥドゥンドゥン・タク・トゥントゥン・ペルクントゥン"), type: TYPES.DARK, hp: 150, stage: 0, weakness: TYPES.LIGHT, retreat: 4,
+    attacks: [{name: "あくのはどう", dmg: 30, cost: 2, effect: ""}, {name: "はかいこうせん", dmg: 120, cost: 5, effect: "discard1"}] },
+  { id: 35, name: "カネロニ・ドラゴーニ", image: imgTemplate("2-カネロニ・ドラゴーニ（Cannelloni-Dragoni）.jpg", "カネロニ・ドラゴーニ"), type: TYPES.NORMAL, hp: 140, stage: 0, weakness: TYPES.DARK, retreat: 4,
+    attacks: [{name: "ドラゴンクロー", dmg: 0, cost: 2, effect: "heal30"}, {name: "げきりん", dmg: 100, cost: 4, effect: ""}] },
+  { id: 36, name: "フルッタドラゴノ・ヴルカニート", image: imgTemplate("4-フルッタドラゴノ・ヴルカニート（Fruttadragono-Vulcanito）.jpg", "フルッタドラゴノ・ヴルカニート"), type: TYPES.FIRE, hp: 130, stage: 0, weakness: TYPES.WATER, retreat: 3,
+    attacks: [{name: "ほのおのキバ", dmg: 40, cost: 2, effect: ""}, {name: "フレアドライブ", dmg: 110, cost: 5, effect: "self10"}] },
+  { id: 37, name: "サーペンテ・パパイヤ", image: imgTemplate("5-サーペンテ・パパイヤ（Serpente-Papaya）.jpg", "サーペンテ・パパイヤ"), type: TYPES.GRASS, hp: 80, stage: 0, weakness: TYPES.FIRE, retreat: 1,
+    attacks: [{name: "まきつく", dmg: 20, cost: 1, effect: ""}, {name: "ポイズンテール", dmg: 50, cost: 3, effect: ""}] },
+  { id: 38, name: "ラ・ヴァッカ・ブラックホール・ゴート", image: imgTemplate("6-ラ・ヴァッカ・ブラックホール・ゴート（La-Vacca-Black-Hole-Goat）.webp", "ラ・ヴァッカ・ブラックホール・ゴート"), type: TYPES.DARK, hp: 160, stage: 0, weakness: TYPES.LIGHT, retreat: 4,
+    attacks: [{name: "やみうち", dmg: 30, cost: 2, effect: ""}, {name: "ブラックホール", dmg: 150, cost: 6, effect: "discard2"}] },
+  { id: 39, name: "ボンバレロ・トララレロ", image: imgTemplate("9-ボンバレロ・トララレロ（Bombalero-Tralalero）.webp", "ボンバレロ・トララレロ"), type: TYPES.FIRE, hp: 90, stage: 0, weakness: TYPES.WATER, retreat: 2,
+    attacks: [{name: "ニトロチャージ", dmg: 30, cost: 2, effect: ""}, {name: "だいばくはつ", dmg: 80, cost: 3, effect: "self20"}] },
+  { id: 40, name: "ココシーノ・ライノ", image: imgTemplate("12-ココシーノ・ライノ（Cocosino-Rhino）.jpg", "ココシーノ・ライノ"), type: TYPES.NORMAL, hp: 110, stage: 0, weakness: TYPES.GRASS, retreat: 3,
+    attacks: [{name: "とっしん", dmg: 0, cost: 1, effect: "heal20"}, {name: "メガホーン", dmg: 70, cost: 3, effect: ""}] },
+
+  { id: 41, name: "ジャヘ-ジャヘ-ジャヘ・サフール", image: imgTemplate("ジャヘ-ジャヘ-ジャヘ・サフール（Jahe-Jahe-Jahe-Sahur）.jpg", "ジャヘ-ジャヘ-ジャヘ・サフール"), type: TYPES.GRASS, hp: 80, stage: 0, weakness: TYPES.FIRE, retreat: 1,
+    attacks: [{name: "はっぱカッター", dmg: 20, cost: 1, effect: "heal10"}, {name: "タネマシンガン", dmg: 50, cost: 3, effect: ""}] },
+  { id: 42, name: "サフール-サフール-サフール・トゥン", image: imgTemplate("サフール-サフール-サフール・トゥン（Sahur-Sahur-Sahur-Tung）.jpg", "サフール-サフール-サフール・トゥン"), type: TYPES.WATER, hp: 90, stage: 0, weakness: TYPES.ELECTRIC, retreat: 2,
+    attacks: [{name: "みずのはどう", dmg: 30, cost: 2, effect: ""}, {name: "アクアテール", dmg: 60, cost: 3, effect: ""}] },
+  { id: 43, name: "ラ・ウルトラ・コンビナシオン", image: imgTemplate("ラ・ウルトラ・コンビナシオン（La-Ultra-Combinasion）.webp", "ラ・ウルトラ・コンビナシオン"), type: TYPES.LIGHT, hp: 130, stage: 0, weakness: TYPES.DARK, retreat: 3,
+    attacks: [{name: "フラッシュ", dmg: 40, cost: 2, effect: ""}, {name: "はかいこうせん", dmg: 100, cost: 4, effect: "discard1"}] },
+  { id: 44, name: "ラ・ヴァッカ・シ・ピッチョーネ・ガラマ・ボネカ・トララレロ・コンビネーション", image: imgTemplate("ラ・ヴァッカ・シ・ピッチョーネ・ガラマ・ボネカ・トララレロ・コンビネーション（La-Vacca-Si-Piccione-Garama-Boneca-Tralalero-Combination）.jpg", "ラ・ヴァッカ・シ・ピッチョーネ・ガラマ・ボネカ・トララレロ・コンビネーション"), type: TYPES.NORMAL, hp: 160, stage: 0, weakness: TYPES.DARK, retreat: 4,
+    attacks: [{name: "ぜんりょく", dmg: 50, cost: 3, effect: "heal20"}, {name: "アルティメット", dmg: 120, cost: 5, effect: ""}] },
+  { id: 45, name: "ラ・コロッサル・コンビネーション", image: imgTemplate("ラ・コロッサル・コンビネーション（La-Colossal-Combinasion）.jpg", "ラ・コロッサル・コンビネーション"), type: TYPES.FIRE, hp: 150, stage: 0, weakness: TYPES.WATER, retreat: 4,
+    attacks: [{name: "じしん", dmg: 40, cost: 2, effect: ""}, {name: "フレアドライブ", dmg: 130, cost: 5, effect: "self10"}] },
+  { id: 46, name: "ラ・フェスタ・コンビナシオン", image: imgTemplate("ラ・フェスタ・コンビナシオン（La-Festa-Combinasion）.jpg", "ラ・フェスタ・コンビナシオン"), type: TYPES.ELECTRIC, hp: 110, stage: 0, weakness: TYPES.NORMAL, retreat: 2,
+    attacks: [{name: "スパーク", dmg: 30, cost: 1, effect: ""}, {name: "ほうでん", dmg: 80, cost: 3, effect: ""}] },
+  { id: 47, name: "ラ・シュプリーム・コンビナシオン", image: imgTemplate("ラ・シュプリーム・コンビナシオン（La-Supreme-Combinasion）.webp", "ラ・シュプリーム・コンビナシオン"), type: TYPES.LIGHT, hp: 140, stage: 0, weakness: TYPES.DARK, retreat: 3,
+    attacks: [{name: "じこさいせい", dmg: 0, cost: 2, effect: "heal50"}, {name: "ゴッドバード", dmg: 110, cost: 4, effect: ""}] },
+  { id: 48, name: "ラ・ピッチョーネ・ホットスポット・コンビナツィオーネ", image: imgTemplate("ラ・ピッチョーネ・ホットスポット・コンビナツィオーネ（La-Piccione-Hotspot-Combinazione）.webp", "ラ・ピッチョーネ・ホットスポット・コンビナツィオーネ"), type: TYPES.FIRE, hp: 100, stage: 0, weakness: TYPES.WATER, retreat: 2,
+    attacks: [{name: "かえんほうしゃ", dmg: 40, cost: 2, effect: ""}, {name: "だいもんじ", dmg: 90, cost: 4, effect: "discard1"}] },
+  { id: 49, name: "ダダダダダダダダ", image: imgTemplate("ダダダダダダダダ（Dadadadadadadada）.webp", "ダダダダダダダダ"), type: TYPES.NORMAL, hp: 60, stage: 0, weakness: TYPES.DARK, retreat: 1,
+    attacks: [{name: "おうふくビンタ", dmg: 20, cost: 1, effect: ""}, {name: "すてみタックル", dmg: 60, cost: 3, effect: "self10"}] },
+  { id: 50, name: "シュテケリト・エル・ブルボニート", image: imgTemplate("シュテケリト・エル・ブルボニート（Shtekerito-el-Bulbonito）.webp", "シュテケリト・エル・ブルボニート"), type: TYPES.GRASS, hp: 90, stage: 0, weakness: TYPES.FIRE, retreat: 2,
+    attacks: [{name: "マジカルリーフ", dmg: 30, cost: 2, effect: ""}, {name: "ソーラービーム", dmg: 70, cost: 3, effect: ""}] },
+
+  { id: 51, name: "レア・トゥン-トゥン-トゥン・サフール", image: imgTemplate("レア・トゥン-トゥン-トゥン・サフール（Rare-Tung-Tung-Tung-Sahur）.jpg", "レア・トゥン-トゥン-トゥン・サフール"), type: TYPES.ELECTRIC, hp: 100, stage: 0, weakness: TYPES.NORMAL, retreat: 2,
+    attacks: [{name: "でんげきは", dmg: 30, cost: 2, effect: ""}, {name: "10まんボルト", dmg: 70, cost: 3, effect: ""}] },
+  { id: 52, name: "ラ・サフール・コンンビナシオン", image: imgTemplate("ラ・サフール・コンンビナシオン（La-Sahur-Combinasion）.webp", "ラ・サフール・コンンビナシオン"), type: TYPES.LIGHT, hp: 120, stage: 0, weakness: TYPES.DARK, retreat: 3,
+    attacks: [{name: "ひかりのかべ", dmg: 40, cost: 2, effect: "heal10"}, {name: "ラスターカノン", dmg: 90, cost: 4, effect: ""}] },
+  { id: 53, name: "ミクロウェレ・ミクロウェレ・サフール", image: imgTemplate("ミクロウェレ・ミクロウェレ・サフール（Mikrowelle-Mikrowelle-Sahur）.jpg", "ミクロウェレ・ミクロウェレ・サフール"), type: TYPES.FIRE, hp: 80, stage: 0, weakness: TYPES.WATER, retreat: 1,
+    attacks: [{name: "ひのこ", dmg: 20, cost: 1, effect: ""}, {name: "かえんほうしゃ", dmg: 60, cost: 3, effect: ""}] },
+  { id: 54, name: "ホホホ・サフール", image: imgTemplate("ホホホ・サフール（Ho-Ho-Ho-Sahur）.jpg", "ホホホ・サフール"), type: TYPES.WATER, hp: 90, stage: 0, weakness: TYPES.ELECTRIC, retreat: 2,
+    attacks: [{name: "みずでっぽう", dmg: 30, cost: 2, effect: ""}, {name: "なみのり", dmg: 50, cost: 3, effect: ""}] },
+  { id: 55, name: "ペペペ・サフール", image: imgTemplate("ペペペ・サフール（Pe-Pe-Pe-Sahur）.webp", "ペペペ・サフール"), type: TYPES.GRASS, hp: 70, stage: 0, weakness: TYPES.FIRE, retreat: 1,
+    attacks: [{name: "はっぱカッター", dmg: 20, cost: 1, effect: ""}, {name: "リーフブレード", dmg: 40, cost: 2, effect: ""}] },
+  { id: 56, name: "ノー-マイ・トゥン-トゥン", image: imgTemplate("ノー-マイ・トゥン-トゥン（Nooo-My-Tung-Tung）-683x1024.jpg", "ノー-マイ・トゥン-トゥン"), type: TYPES.DARK, hp: 60, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "おどろかす", dmg: 20, cost: 1, effect: ""}, {name: "シャドーボール", dmg: 50, cost: 3, effect: "self10"}] },
+  { id: 57, name: "ドン-ドン-ドン・サター", image: imgTemplate("ドン-ドン-ドン・サター（Don-Don-Don-Satur）.webp", "ドン-ドン-ドン・サター"), type: TYPES.NORMAL, hp: 110, stage: 0, weakness: TYPES.DARK, retreat: 3,
+    attacks: [{name: "ふみつけ", dmg: 30, cost: 2, effect: ""}, {name: "じしん", dmg: 80, cost: 4, effect: ""}] },
+  { id: 58, name: "ティクタク-ティクタク・サフール", image: imgTemplate("ティクタク-ティクタク・サフール（Tictac-Tictac-Sahur）.jpg", "ティクタク-ティクタク・サフール"), type: TYPES.ELECTRIC, hp: 80, stage: 0, weakness: TYPES.WATER, retreat: 2,
+    attacks: [{name: "スピードスター", dmg: 20, cost: 1, effect: ""}, {name: "でんじほう", dmg: 50, cost: 3, effect: ""}] },
+  { id: 59, name: "チャチェチ・サフール", image: imgTemplate("チャチェチ・サフール（Chachechi-Sahur）.webp", "チャチェチ・サフール"), type: TYPES.GRASS, hp: 70, stage: 0, weakness: TYPES.FIRE, retreat: 1,
+    attacks: [{name: "つるのムチ", dmg: 10, cost: 1, effect: ""}, {name: "マジカルリーフ", dmg: 40, cost: 2, effect: ""}] },
+  { id: 60, name: "チェク-チェク-チェク-123・サフール", image: imgTemplate("チェク-チェク-チェク-123・サフール（Cek-Cek-Cek-123-Sahur）.webp", "チェク-チェク-チェク-123・サフール"), type: TYPES.NORMAL, hp: 90, stage: 0, weakness: TYPES.DARK, retreat: 2,
+    attacks: [{name: "ハイパーボイス", dmg: 30, cost: 2, effect: ""}, {name: "ばくおんぱ", dmg: 60, cost: 3, effect: ""}] },
+
+  // --- パート7: アップロードされた画像キャラ ---
+  { id: 61, name: "パパパ・サフール", image: imgTemplate("パパパ・サフール（Pa-Pa-Pa-Sahur）.webp", "パパパ・サフール"), type: TYPES.WATER, hp: 80, stage: 0, weakness: TYPES.ELECTRIC, retreat: 1,
+    attacks: [{name: "みずのはどう", dmg: 20, cost: 1, effect: ""}, {name: "アクアテール", dmg: 50, cost: 3, effect: ""}] },
+  { id: 62, name: "バンビーノ-タム-タム-タム・サフール", image: imgTemplate("バンビーノ-タム-タム-タム・サフール（Bambino-Tum-Tum-Tum-Sahur）.jpg", "バンビーノ-タム-タム-タム・サフール"), type: TYPES.NORMAL, hp: 90, stage: 0, weakness: TYPES.DARK, retreat: 2,
+    attacks: [{name: "はたく", dmg: 30, cost: 2, effect: ""}, {name: "メガトンパンチ", dmg: 60, cost: 3, effect: ""}] },
+  { id: 63, name: "ピタヤ-ピタヤ-ピタヤ・サフール", image: imgTemplate("ピタヤ-ピタヤ-ピタヤ・サフール（Pitaya-Pitaya-Pitaya-Sahur）.jpg", "ピタヤ-ピタヤ-ピタヤ・サフール"), type: TYPES.GRASS, hp: 100, stage: 0, weakness: TYPES.FIRE, retreat: 2,
+    attacks: [{name: "すいとる", dmg: 20, cost: 1, effect: "heal10"}, {name: "タネマシンガン", dmg: 50, cost: 3, effect: ""}] },
+  { id: 64, name: "ブーン-ブーン-ブーン・サフール", image: imgTemplate("ブーン-ブーン-ブーン・サフール（Boom-Boom-Boom-Sahur）.webp", "ブーン-ブーン-ブーン・サフール"), type: TYPES.FIRE, hp: 110, stage: 0, weakness: TYPES.WATER, retreat: 3,
+    attacks: [{name: "ニトロチャージ", dmg: 30, cost: 2, effect: ""}, {name: "だいばくはつ", dmg: 80, cost: 4, effect: "self10"}] },
+  { id: 65, name: "フェロ-フェロ-フェロ・サフール", image: imgTemplate("フェロ-フェロ-フェロ・サフール（Ferro-Ferro-Ferro-Sahur）.webp", "フェロ-フェロ-フェロ・サフール"), type: TYPES.NORMAL, hp: 130, stage: 0, weakness: TYPES.DARK, retreat: 4,
+    attacks: [{name: "てっぺき", dmg: 0, cost: 2, effect: "heal30"}, {name: "アイアンヘッド", dmg: 70, cost: 4, effect: ""}] },
+  { id: 66, name: "ロックル-ロックル-ロックル・サフール", image: imgTemplate("ロックル-ロックル-ロックル・サフール（Rockr-Rockr-Rockr-Sahur）.webp", "ロックル-ロックル-ロックル・サフール"), type: TYPES.NORMAL, hp: 120, stage: 0, weakness: TYPES.WATER, retreat: 3,
+    attacks: [{name: "いわおとし", dmg: 30, cost: 2, effect: ""}, {name: "ストーンエッジ", dmg: 90, cost: 4, effect: ""}] },
+  { id: 67, name: "ロス・ジョブシートス", image: imgTemplate("ロス・ジョブシートス（Los-Jobcitos）-1.webp", "ロス・ジョブシートス"), type: TYPES.DARK, hp: 80, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "おどろかす", dmg: 20, cost: 1, effect: ""}, {name: "あくのはどう", dmg: 50, cost: 3, effect: ""}] },
+  { id: 68, name: "ロス・タタタタシートス", image: imgTemplate("ロス・タタタタシートス（Los-Tatatatacitos）.webp", "ロス・タタタタシートス"), type: TYPES.ELECTRIC, hp: 70, stage: 0, weakness: TYPES.NORMAL, retreat: 1,
+    attacks: [{name: "でんこうせっか", dmg: 20, cost: 1, effect: ""}, {name: "ボルトチェンジ", dmg: 40, cost: 2, effect: ""}] },
+  { id: 69, name: "ロス・トゥントゥンシートス・ディセン・サフール", image: imgTemplate("ロス・トゥントゥンシートス・ディセン・サフール（Los-Tungtungcitos-Dicen-Sahur）.webp", "ロス・トゥントゥンシートス・ディセン・サフール"), type: TYPES.WATER, hp: 140, stage: 0, weakness: TYPES.ELECTRIC, retreat: 4,
+    attacks: [{name: "アクアリング", dmg: 0, cost: 2, effect: "heal30"}, {name: "ハイドロポンプ", dmg: 100, cost: 4, effect: "discard1"}] },
+  { id: 70, name: "レン-レン-レン・サフール", image: imgTemplate("レン-レン-レン・サフール（Reng-Reng-Reng-Sahur）.jpg", "レン-レン-レン・サフール"), type: TYPES.FIRE, hp: 90, stage: 0, weakness: TYPES.WATER, retreat: 2,
+    attacks: [{name: "ひのこ", dmg: 20, cost: 1, effect: ""}, {name: "かえんほうしゃ", dmg: 60, cost: 3, effect: ""}] },
+
+  // --- パート8以降: 絵文字を使った王道ファンタジーのカード ---
+  { id: 71, name: "ユニコーン", emoji: "🦄", type: TYPES.LIGHT, hp: 90, stage: 0, weakness: TYPES.DARK, retreat: 1,
+    attacks: [{name: "ホーンアタック", dmg: 30, cost: 2, effect: ""}, {name: "スターダスト", dmg: 60, cost: 3, effect: ""}] },
+  { id: 72, name: "ゴーレム", emoji: "🪨", type: TYPES.NORMAL, hp: 140, stage: 0, weakness: TYPES.WATER, retreat: 4,
+    attacks: [{name: "いわおとし", dmg: 40, cost: 3, effect: ""}, {name: "じしん", dmg: 90, cost: 4, effect: ""}] },
+  { id: 73, name: "ニンジャ", emoji: "🥷", type: TYPES.DARK, hp: 70, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "しゅりけん", dmg: 20, cost: 1, effect: ""}, {name: "あんさつ", dmg: 50, cost: 3, effect: ""}] },
+  { id: 74, name: "エルフの弓使い", emoji: "🧝‍♀️", type: TYPES.GRASS, hp: 80, stage: 0, weakness: TYPES.FIRE, retreat: 1,
+    attacks: [{name: "マジックアロー", dmg: 20, cost: 1, effect: ""}, {name: "スナイプ", dmg: 60, cost: 3, effect: ""}] },
+  { id: 75, name: "サラマンダー", emoji: "🦎", type: TYPES.FIRE, hp: 70, stage: 0, weakness: TYPES.WATER, retreat: 1,
+    attacks: [{name: "ひのこ", dmg: 20, cost: 1, effect: ""}, {name: "かえんのしっぽ", dmg: 40, cost: 2, effect: ""}] },
+  { id: 76, name: "クラーケン", emoji: "🦑", type: TYPES.WATER, hp: 160, stage: 0, weakness: TYPES.ELECTRIC, retreat: 4,
+    attacks: [{name: "スミはき", dmg: 40, cost: 3, effect: ""}, {name: "テンタクルス", dmg: 130, cost: 6, effect: "discard2"}] },
+  { id: 77, name: "フェアリー", emoji: "🧚", type: TYPES.LIGHT, hp: 50, stage: 0, weakness: TYPES.DARK, retreat: 1,
+    attacks: [{name: "ようせいのこな", dmg: 10, cost: 1, effect: "heal10"}, {name: "マジカルシャイン", dmg: 30, cost: 2, effect: ""}] },
+  { id: 78, name: "オーク", emoji: "👹", type: TYPES.NORMAL, hp: 100, stage: 0, weakness: TYPES.FIRE, retreat: 3,
+    attacks: [{name: "ぶちかまし", dmg: 30, cost: 2, effect: ""}, {name: "あばれまわる", dmg: 70, cost: 4, effect: "self10"}] },
+  { id: 79, name: "サンダーバード", emoji: "🦅", type: TYPES.ELECTRIC, hp: 110, stage: 0, weakness: TYPES.NORMAL, retreat: 2,
+    attacks: [{name: "でんこうせっか", dmg: 20, cost: 1, effect: ""}, {name: "ライトニング", dmg: 80, cost: 4, effect: ""}] },
+  { id: 80, name: "スケルトン", emoji: "💀", type: TYPES.DARK, hp: 60, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "ホネこんぼう", dmg: 20, cost: 1, effect: ""}, {name: "よみがえる", dmg: 0, cost: 2, effect: "heal30"}] },
+  { id: 81, name: "ミノタウロス", emoji: "🐂", type: TYPES.NORMAL, hp: 130, stage: 0, weakness: TYPES.FIRE, retreat: 3,
+    attacks: [{name: "メガホーン", dmg: 40, cost: 2, effect: ""}, {name: "ギガインパクト", dmg: 100, cost: 5, effect: ""}] },
+  { id: 82, name: "マーメイド", emoji: "🧜‍♀️", type: TYPES.WATER, hp: 80, stage: 0, weakness: TYPES.ELECTRIC, retreat: 1,
+    attacks: [{name: "うたう", dmg: 0, cost: 1, effect: "heal20"}, {name: "アクアストーム", dmg: 50, cost: 3, effect: ""}] },
+  { id: 83, name: "トレント", emoji: "🌳", type: TYPES.GRASS, hp: 150, stage: 0, weakness: TYPES.FIRE, retreat: 4,
+    attacks: [{name: "ねをはる", dmg: 0, cost: 2, effect: "heal30"}, {name: "リーフストーム", dmg: 110, cost: 5, effect: "discard1"}] },
+  { id: 84, name: "イフリート", emoji: "🔥", type: TYPES.FIRE, hp: 90, stage: 0, weakness: TYPES.WATER, retreat: 2,
+    attacks: [{name: "フレイムウォール", dmg: 20, cost: 1, effect: ""}, {name: "インフェルノ", dmg: 80, cost: 4, effect: ""}] },
+  { id: 85, name: "ペガサス", emoji: "🐎", type: TYPES.LIGHT, hp: 100, stage: 0, weakness: TYPES.DARK, retreat: 1,
+    attacks: [{name: "とっしん", dmg: 30, cost: 2, effect: ""}, {name: "ホーリーチャージ", dmg: 70, cost: 3, effect: ""}] },
+  { id: 86, name: "デュラハン", emoji: "👻", type: TYPES.DARK, hp: 120, stage: 0, weakness: TYPES.LIGHT, retreat: 3,
+    attacks: [{name: "のろい", dmg: 20, cost: 1, effect: ""}, {name: "デスサイズ", dmg: 90, cost: 4, effect: ""}] },
+  { id: 87, name: "リヴァイアサン", emoji: "🐉", type: TYPES.WATER, hp: 170, stage: 0, weakness: TYPES.ELECTRIC, retreat: 4,
+    attacks: [{name: "ハイドロポンプ", dmg: 50, cost: 3, effect: ""}, {name: "タイダルウェーブ", dmg: 140, cost: 6, effect: "discard2"}] },
+  { id: 88, name: "グリフォン", emoji: "🦅", type: TYPES.ELECTRIC, hp: 100, stage: 0, weakness: TYPES.NORMAL, retreat: 2,
+    attacks: [{name: "エアカッター", dmg: 30, cost: 2, effect: ""}, {name: "サンダーストーム", dmg: 70, cost: 4, effect: ""}] },
+  { id: 89, name: "ドワーフ", emoji: "⛏️", type: TYPES.NORMAL, hp: 90, stage: 0, weakness: TYPES.FIRE, retreat: 2,
+    attacks: [{name: "ピッケルスマッシュ", dmg: 30, cost: 2, effect: ""}, {name: "グランドスラム", dmg: 60, cost: 3, effect: ""}] },
+  { id: 90, name: "ドライアド", emoji: "🌲", type: TYPES.GRASS, hp: 110, stage: 0, weakness: TYPES.FIRE, retreat: 3,
+    attacks: [{name: "しぜんのちから", dmg: 30, cost: 2, effect: "heal10"}, {name: "ウッドホーン", dmg: 70, cost: 4, effect: ""}] },
+  { id: 91, name: "ケルベロス", emoji: "🐺", type: TYPES.FIRE, hp: 130, stage: 0, weakness: TYPES.WATER, retreat: 3,
+    attacks: [{name: "ほのおのキバ", dmg: 40, cost: 2, effect: ""}, {name: "トリプルバイト", dmg: 100, cost: 5, effect: ""}] },
+  { id: 92, name: "ウンディーネ", emoji: "🧜‍♀️", type: TYPES.WATER, hp: 80, stage: 0, weakness: TYPES.ELECTRIC, retreat: 1,
+    attacks: [{name: "アクアヒーツ", dmg: 0, cost: 1, effect: "heal30"}, {name: "ウォーターカッター", dmg: 40, cost: 2, effect: ""}] },
+  { id: 93, name: "キメラ", emoji: "🦁", type: TYPES.NORMAL, hp: 120, stage: 0, weakness: TYPES.DARK, retreat: 3,
+    attacks: [{name: "かみくだく", dmg: 30, cost: 2, effect: ""}, {name: "ビーストストライク", dmg: 80, cost: 4, effect: ""}] },
+  { id: 94, name: "ジン", emoji: "🧞‍♂️", type: TYPES.ELECTRIC, hp: 100, stage: 0, weakness: TYPES.NORMAL, retreat: 2,
+    attacks: [{name: "マジックハンド", dmg: 30, cost: 2, effect: ""}, {name: "ライトニングボール", dmg: 70, cost: 4, effect: ""}] },
+  { id: 95, name: "サキュバス", emoji: "👿", type: TYPES.DARK, hp: 70, stage: 0, weakness: TYPES.LIGHT, retreat: 1,
+    attacks: [{name: "ドレインキッス", dmg: 20, cost: 1, effect: "heal10"}, {name: "ナイトメア", dmg: 50, cost: 3, effect: ""}] },
+  { id: 96, name: "ヴァルキリー", emoji: "🛡️", type: TYPES.LIGHT, hp: 110, stage: 0, weakness: TYPES.DARK, retreat: 2,
+    attacks: [{name: "スラッシュ", dmg: 30, cost: 2, effect: ""}, {name: "ヘブンズドライブ", dmg: 90, cost: 4, effect: "self10"}] },
+  { id: 97, name: "マンドラゴラ", emoji: "🌿", type: TYPES.GRASS, hp: 60, stage: 0, weakness: TYPES.FIRE, retreat: 1,
+    attacks: [{name: "あまいかおり", dmg: 10, cost: 1, effect: ""}, {name: "エナジーボール", dmg: 50, cost: 3, effect: ""}] },
+  { id: 98, name: "サイクロプス", emoji: "👁️", type: TYPES.NORMAL, hp: 140, stage: 0, weakness: TYPES.DARK, retreat: 4,
+    attacks: [{name: "メガトンパンチ", dmg: 40, cost: 3, effect: ""}, {name: "はかいこうせん", dmg: 110, cost: 5, effect: "discard1"}] },
+  { id: 99, name: "カーバンクル", emoji: "🌱", type: TYPES.GRASS, hp: 50, stage: 0, weakness: TYPES.FIRE, retreat: 1,
+    attacks: [{name: "なきごえ", dmg: 10, cost: 1, effect: ""}, {name: "マジカルリーフ", dmg: 30, cost: 2, effect: ""}] },
+  { id: 100, name: "バハムート", emoji: "🐉", type: TYPES.WATER, hp: 200, stage: 0, weakness: TYPES.ELECTRIC, retreat: 4,
+    attacks: [{name: "アクアブレス", dmg: 50, cost: 3, effect: ""}, {name: "アルティメットストーム", dmg: 150, cost: 7, effect: "discard3"}] }
+];
+
+/* ========================================================================
+   システム管理 / ステート管理
+======================================================================== */
+const defaultSleeve = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="140"><rect width="100" height="140" fill="%232c5282"/><circle cx="50" cy="70" r="30" fill="none" stroke="%234299e1" stroke-width="4"/><text x="50" y="75" font-size="40" text-anchor="middle" fill="%234299e1">F</text></svg>';
+
+let playerState = {
+  name: "Hero Player",
+  coins: 1000,
+  collection: [], // 所持カードID配列
+  deck: [], // デッキに組んだカードID配列 (20枚)
+  bgImage: null,
+  sleeveImage: null
+};
+
+// 初期データロードと安全対策
+function loadData() {
+  const data = localStorage.getItem('fantasyCardPocket');
+  if (data) {
+    try {
+      const parsed = JSON.parse(data);
+      playerState = { ...playerState, ...parsed };
+      if (!Array.isArray(playerState.collection)) playerState.collection = [];
+      if (!Array.isArray(playerState.deck)) playerState.deck = [];
+      
+      // バグ対策：デッキが21枚以上になっていた場合は20枚に切り詰める
+      if (playerState.deck.length > 20) {
+        playerState.deck = playerState.deck.slice(0, 20);
+        saveData();
+      }
+    } catch(e) {
+      initDefaultData();
+    }
+  } else {
+    initDefaultData();
+  }
+  
+  setAppHeight(); // ロード時にも高さ計算を実行
+  updateUI();
+}
+
+function initDefaultData() {
+  playerState.collection = [1,1,2,3,4,16,16,17,31,31,32,46,47,61,62,81,81,81,82,83];
+  playerState.deck = [1,1,2,3,4,16,16,17,31,31,32,46,47,61,62,81,81,81,82,83]; 
+  saveData();
+}
+
+function saveData() {
+  localStorage.setItem('fantasyCardPocket', JSON.stringify(playerState));
+}
+
+// UI更新
+function updateUI() {
+  document.getElementById('player-name').innerText = playerState.name;
+  document.getElementById('input-player-name').value = playerState.name;
+  document.getElementById('coin-count').innerText = playerState.coins;
+  document.getElementById('pack-coins').innerText = playerState.coins;
+  
+  if (playerState.bgImage) {
+    document.getElementById('app').style.backgroundImage = `url(${playerState.bgImage})`;
+  } else {
+    document.getElementById('app').style.backgroundImage = "url('data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'100%\\' height=\\'100%\\'><defs><linearGradient id=\\'bg\\' x1=\\'0%\\' y1=\\'0%\\' x2=\\'100%\\' y2=\\'100%\\'><stop offset=\\'0%\\' stop-color=\\'%231a365d\\'/><stop offset=\\'100%\\' stop-color=\\'%232a4365\\'/></linearGradient></defs><rect width=\\'100%\\' height=\\'100%\\' fill=\\'url(%23bg)\\'/></svg>')";
+  }
+}
+
+// トースト通知
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.innerText = msg;
+  toast.style.opacity = 1;
+  setTimeout(() => { toast.style.opacity = 0; }, 2000);
+}
+
+// 画面遷移
+function nav(screenId) {
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  document.getElementById('screen-' + screenId).classList.add('active');
+  
+  if(screenId === 'collection') initCollectionBook();
+  if(screenId === 'deck') { editingDeck = [...playerState.deck]; renderDeckBuilder(); }
+  if(screenId === 'battle-setup') renderBattleSetup();
+}
+
+/* ========================================================================
+   ユーティリティ
+======================================================================== */
+function getCardData(id) {
+  return CARD_DB.find(c => c.id === id);
+}
+
+// HTML生成ヘルパー (カードデザイン)
+function generateCardHTML(card, isSleeve=false, battleData=null) {
+  if(!card) return `<div class="card bg-gray-700 opacity-50 flex items-center justify-center"></div>`;
+  if(isSleeve) {
+    const bg = playerState.sleeveImage || defaultSleeve;
+    return `<div class="card" style="background-image:url('${bg}'); background-size:cover; background-position:center;"></div>`;
+  }
+  
+  let hpDisp = `HP ${card.hp}`;
+  let hpColorClass = "text-red-600";
+  let energyDisp = "";
+
+  if (battleData) {
+    hpDisp = `HP ${battleData.currentHp}/${card.hp}`;
+    const hpPercent = battleData.currentHp / card.hp;
+    hpColorClass = hpPercent > 0.5 ? 'text-green-600' : (hpPercent > 0.2 ? 'text-yellow-600' : 'text-red-600');
+    
+    let energyDots = '';
+    for(let i=0; i<battleData.energy; i++) energyDots += '⭐';
+    if (battleData.energy > 0) {
+      energyDisp = `<div class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-[0.6rem] bg-black/80 text-white px-2 py-0.5 rounded-full z-10 whitespace-nowrap">${energyDots}</div>`;
+    }
+  }
+
+  // 絵文字か画像かで表示を切り替える
+  let visualContent = '';
+  if (card.image) {
+    visualContent = card.image;
+  } else if (card.emoji) {
+    visualContent = `<div class="text-4xl drop-shadow-md flex items-center justify-center w-full h-full">${card.emoji}</div>`;
+  }
+
+  // 狭い場所でもレイアウトが崩れないように文字サイズや高さを調整
+  // 名前部分は truncate で枠を超えたら「...」になるようにしています
+  return `
+    <div class="card type-${card.type} p-0.5 text-black flex flex-col justify-between h-full relative text-[0.4rem]">
+      ${energyDisp}
+      <div class="flex justify-between items-center bg-white/50 px-1 rounded rounded-b-none border-b border-gray-400">
+        <span class="font-bold truncate w-[60%] leading-tight">${card.name}</span>
+        <span class="font-bold ${hpColorClass} whitespace-nowrap leading-tight">${hpDisp}</span>
+      </div>
+      <div class="flex-1 flex justify-center items-center text-xs font-bold text-center shadow-inner bg-white/30 my-0.5 rounded overflow-hidden text-gray-800 p-1 relative">
+        ${visualContent}
+      </div>
+      <div class="bg-white/70 rounded p-0.5 flex flex-col gap-[1px] leading-tight h-[35%] overflow-hidden justify-center">
+        ${card.attacks.map(atk => `
+          <div class="flex justify-between border-b border-gray-300 pb-[1px]">
+            <span class="font-bold truncate pr-1">⭐${atk.cost} ${atk.name}</span>
+            <span class="font-bold">${atk.dmg > 0 ? atk.dmg : '-'}</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="flex justify-between bg-black/10 px-1 rounded text-gray-700 mt-0.5 leading-tight">
+        <span>弱:${typeToEmoji(card.weakness)}</span>
+        <span>逃:⭐${card.retreat}</span>
+      </div>
+    </div>
+  `;
+}
+
+function typeToEmoji(type) {
+  const map = { fire:'🔥', water:'💧', grass:'🌿', electric:'⚡', dark:'🌌', light:'✨', normal:'⚪' };
+  return map[type] || '⚪';
+}
+
+/* ========================================================================
+   パック開封 (ガチャ)
+======================================================================== */
+const packRates = {
+  fire: { types: [TYPES.FIRE, TYPES.WATER, TYPES.GRASS, TYPES.ELECTRIC], chance: 0.8 },
+  dark: { types: [TYPES.DARK, TYPES.LIGHT, TYPES.NORMAL], chance: 0.8 },
+  legend: { types: Object.values(TYPES), chance: 1.0 }
+};
+
+let currentPulledCards = [];
+
+function openPack(packType) {
+  if (playerState.coins < 100) {
+    showToast("コインが足りません！");
+    return;
+  }
+  
+  playerState.coins -= 100;
+  
+  currentPulledCards = [];
+  const rate = packRates[packType];
+  const targetCards = CARD_DB.filter(c => rate.types.includes(c.type));
+  
+  for(let i=0; i<5; i++) {
+    let pool = targetCards;
+    if(packType === 'legend' && Math.random() > 0.5) pool = targetCards.filter(c => c.hp >= 80);
+    if(pool.length === 0) pool = CARD_DB;
+    
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    currentPulledCards.push(c.id);
+    playerState.collection.push(c.id);
+  }
+  saveData();
+  updateUI();
+  
+  document.getElementById('pack-selection').classList.add('hidden');
+  document.getElementById('pack-opening').classList.remove('hidden');
+  document.getElementById('pack-opening').classList.add('flex');
+  
+  const target = document.getElementById('pack-tear-target');
+  target.className = 'w-64 h-96 rounded-xl border-4 border-white shadow-2xl flex items-center justify-center relative cursor-pointer';
+  target.innerHTML = `<div class="text-8xl">📦</div><div class="absolute top-0 w-full h-8 bg-gray-300 opacity-50 flex justify-center items-center"><span class="text-xs text-black font-bold">SWIPE / TAP</span></div>`;
+  target.style.background = packType === 'fire' ? 'linear-gradient(to bottom, #e53e3e, #742a2a)' : 
+                            packType === 'dark' ? 'linear-gradient(to bottom, #805ad5, #2a4365)' : 
+                            'linear-gradient(to bottom, #ecc94b, #b7791f)';
+                            
+  document.getElementById('pulled-cards-area').classList.add('hidden');
+  document.getElementById('pack-instruction').classList.remove('hidden');
+
+  target.onclick = () => {
+    target.classList.add('anim-tear');
+    document.getElementById('pack-instruction').classList.add('hidden');
+    setTimeout(() => {
+      showPulledCards();
+    }, 1000);
+  };
+}
+
+function showPulledCards() {
+  document.getElementById('pack-tear-target').classList.add('hidden');
+  document.getElementById('pulled-cards-area').classList.remove('hidden');
+  
+  const container = document.getElementById('pulled-cards-container');
+  container.innerHTML = '';
+  
+  currentPulledCards.forEach((id, idx) => {
+    const card = getCardData(id);
+    const wrap = document.createElement('div');
+    wrap.className = 'w-24 h-36 card-wrap anim-attack';
+    wrap.style.animationDelay = `${idx * 0.2}s`;
+    wrap.innerHTML = generateCardHTML(card);
+    container.appendChild(wrap);
+  });
+}
+
+function endPackOpening() {
+  document.getElementById('pack-opening').classList.add('hidden');
+  document.getElementById('pack-opening').classList.remove('flex');
+  document.getElementById('pack-selection').classList.remove('hidden');
+  document.getElementById('pack-tear-target').classList.remove('hidden', 'anim-tear');
+}
+
+/* ========================================================================
+   デッキ編成
+======================================================================== */
+let editingDeck = [];
+
+function renderDeckBuilder() {
+  // 現在のデッキの表示
+  const curDeckHtml = editingDeck.map((id, index) => {
+    const card = getCardData(id);
+    return `<div class="w-[4.5rem] aspect-[5/7] card-wrap cursor-pointer shrink-0" onclick="removeFromDeck(${index})">${generateCardHTML(card)}</div>`;
+  }).join('');
+  document.getElementById('current-deck-list').innerHTML = curDeckHtml;
+  document.getElementById('deck-count').innerText = `${editingDeck.length}/20`;
+  document.getElementById('deck-count').className = editingDeck.length === 20 ? 'text-green-400 font-bold' : 'text-red-400 font-bold';
+
+  // ★所持カードからデッキ編成中のカードを除外して表示するロジック
+  const counts = {};
+  playerState.collection.forEach(id => {
+    counts[id] = (counts[id] || 0) + 1;
+  });
+  editingDeck.forEach(id => {
+    if(counts[id]) counts[id]--;
+  });
+
+  const filter = document.getElementById('deck-filter').value;
+  
+  let displayCards = [];
+  Object.keys(counts).forEach(idStr => {
+    const id = parseInt(idStr);
+    const count = counts[id];
+    if(count > 0) {
+      const card = getCardData(id);
+      if(card && (filter === 'all' || card.type === filter)) {
+        // 所持枚数分だけ表示用配列に積む
+        for(let i=0; i<count; i++) {
+          displayCards.push(card);
+        }
+      }
+    }
+  });
+
+  // 見やすくID順にソート
+  displayCards.sort((a,b) => a.id - b.id);
+
+  const colHtml = displayCards.map(card => {
+    return `<div class="w-full aspect-[5/7] card-wrap cursor-pointer" onclick="addToDeck(${card.id})">${generateCardHTML(card)}</div>`;
+  }).join('');
+  document.getElementById('collection-deck-list').innerHTML = colHtml;
+}
+
+function addToDeck(id) {
+  if(editingDeck.length >= 20) {
+    showToast("デッキは最大20枚です！");
+    return;
+  }
+  editingDeck.push(id);
+  renderDeckBuilder();
+}
+function removeFromDeck(index) {
+  editingDeck.splice(index, 1);
+  renderDeckBuilder();
+}
+function saveDeckAndNav(target) {
+  if (editingDeck.length !== 20) {
+    showToast("デッキは20枚にしてください！(保存せず戻ります)");
+    // 条件を満たしていない場合は保存せずに戻る
+  } else {
+    playerState.deck = [...editingDeck];
+    saveData();
+    showToast("デッキを保存しました！");
+  }
+  nav(target);
+}
+
+/* ========================================================================
+   コレクション (本)
+======================================================================== */
+let currentPage = 0;
+const cardsPerPage = 4;
+let totalPages = 0;
+
+function initCollectionBook() {
+  const uniqueCards = [...new Set(playerState.collection)];
+  const rate = Math.floor((uniqueCards.length / CARD_DB.length) * 100);
+  document.getElementById('collection-rate').innerText = rate;
+  
+  totalPages = Math.ceil(CARD_DB.length / cardsPerPage);
+  currentPage = 0;
+  
+  const area = document.getElementById('book-area');
+  area.innerHTML = '';
+  
+  for(let i=0; i<totalPages; i++) {
+    const pageDiv = document.createElement('div');
+    pageDiv.className = `page absolute w-full h-full bg-gray-200 border border-gray-400 flex flex-col p-4 shadow-[-5px_0_10px_rgba(0,0,0,0.1)] z-${totalPages-i}`;
+    pageDiv.style.zIndex = totalPages - i;
+    
+    let content = `<div class="text-right text-xs text-gray-800 mb-2 font-bold">Page ${i+1}</div><div class="grid grid-cols-2 gap-2 flex-1">`;
+    for(let j=0; j<cardsPerPage; j++) {
+      const idx = i * cardsPerPage + j;
+      if(idx < CARD_DB.length) {
+        const card = CARD_DB[idx];
+        const hasCard = playerState.collection.includes(card.id);
+        if(hasCard) {
+          content += `<div class="w-full aspect-[5/7]">${generateCardHTML(card)}</div>`;
+        } else {
+          // 未所持の場合はシルエット風やプレースホルダーにする
+          content += `<div class="w-full aspect-[5/7] bg-black/80 rounded-lg flex flex-col items-center justify-center opacity-50 p-2"><span class="text-[10px] font-bold text-gray-400 text-center break-all">未獲得</span></div>`;
+        }
+      }
+    }
+    content += `</div>`;
+    pageDiv.innerHTML = content;
+    area.appendChild(pageDiv);
+  }
+  updateBookPages();
+}
+
+function updateBookPages() {
+  const pages = document.querySelectorAll('.page');
+  pages.forEach((p, idx) => {
+    if(idx < currentPage) {
+      p.classList.add('turned');
+    } else {
+      p.classList.remove('turned');
+    }
+  });
+}
+function nextPage() { if(currentPage < totalPages - 1) { currentPage++; updateBookPages(); } }
+function prevPage() { if(currentPage > 0) { currentPage--; updateBookPages(); } }
+
+/* ========================================================================
+   設定関連
+======================================================================== */
+function saveName() {
+  playerState.name = document.getElementById('input-player-name').value;
+  saveData();
+  updateUI();
+  showToast("名前を保存しました");
+}
+
+document.getElementById('upload-bg').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    playerState.bgImage = e.target.result;
+    saveData();
+    updateUI();
+    showToast("背景を変更しました");
+  }
+  reader.readAsDataURL(file);
+});
+function resetBg() {
+  playerState.bgImage = null;
+  saveData();
+  updateUI();
+  showToast("背景をリセットしました");
+}
+
+document.getElementById('upload-sleeve').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    playerState.sleeveImage = e.target.result;
+    saveData();
+    showToast("スリーブを変更しました");
+  }
+  reader.readAsDataURL(file);
+});
+function resetSleeve() {
+  playerState.sleeveImage = null;
+  saveData();
+  showToast("スリーブをリセットしました");
+}
+function resetData() {
+  if(confirm("本当に全データを初期化しますか？")) {
+    localStorage.removeItem('fantasyCardPocket');
+    location.reload();
+  }
+}
+
+/* ========================================================================
+   バトル準備
+======================================================================== */
+let selectedCpuLevel = 1;
+
+function renderBattleSetup() {
+  if(playerState.deck.length !== 20) {
+    alert("デッキが20枚ではありません。デッキを編成してください。");
+    nav('deck');
+    return;
+  }
+  
+  const prevHtml = playerState.deck.map(id => {
+    return `<div class="w-10 h-14 shrink-0">${generateCardHTML(getCardData(id))}</div>`;
+  }).join('');
+  document.getElementById('setup-deck-preview').innerHTML = prevHtml;
+
+  let cpuHtml = '';
+  for(let i=1; i<=15; i++) {
+    const reward = i * 10;
+    cpuHtml += `
+      <div class="bg-gray-700 p-3 rounded-lg flex justify-between items-center border border-gray-600">
+        <div>
+          <div class="font-bold text-red-400">CPU Lv.${i}</div>
+          <div class="text-xs text-gray-300">報酬: ${reward}🪙</div>
+        </div>
+        <button onclick="startBattle(${i})" class="bg-blue-600 text-white px-4 py-2 rounded-full font-bold shadow active:scale-95 transition">挑戦する</button>
+      </div>
+    `;
+  }
+  document.getElementById('cpu-list').innerHTML = cpuHtml;
+}
+
+/* ========================================================================
+   バトルエンジン
+======================================================================== */
+let battleState = null;
+
+function createDeck(isCpu, level=1) {
+  if(!isCpu) {
+    let d = [...playerState.deck];
+    return d.sort(() => Math.random() - 0.5).map(id => ({...getCardData(id), currentHp: getCardData(id).hp, energy: 0, uid: Math.random()}));
+  } else {
+    let d = [];
+    const pool = CARD_DB.filter(c => level > 10 ? c.hp >= 80 : (level > 5 ? c.hp >= 60 : c.hp <= 80));
+    for(let i=0; i<20; i++) d.push({...pool[Math.floor(Math.random()*pool.length)], currentHp: 0, energy: 0, uid: Math.random()});
+    d.forEach(c => c.currentHp = c.hp);
+    return d;
+  }
+}
+
+function startBattle(cpuLevel) {
+  selectedCpuLevel = cpuLevel;
+  
+  battleState = {
+    player: { deck: createDeck(false), hand: [], active: null, bench: [null, null, null], points: 0, energyZone: 0, energyAttachedThisTurn: false },
+    cpu: { deck: createDeck(true, cpuLevel), hand: [], active: null, bench: [null, null, null], points: 0, energyZone: 0, energyAttachedThisTurn: false },
+    turn: 1, isPlayerTurn: true, phase: 'setup', log: []
+  };
+
+  document.getElementById('cpu-name-disp').innerText = `CPU Lv.${cpuLevel}`;
+  document.getElementById('battle-result').classList.add('hidden');
+  
+  const appBg = document.getElementById('app').style.backgroundImage;
+  document.getElementById('screen-battle').style.backgroundImage = appBg;
+
+  nav('battle');
+  
+  for(let i=0; i<5; i++) { drawCard('player'); drawCard('cpu'); }
+  updateBattleUI();
+  showToast("バトル場に出すカードを手札から選んでください");
+}
+
+function drawCard(side) {
+  if(battleState[side].deck.length > 0) {
+    battleState[side].hand.push(battleState[side].deck.pop());
+  }
+}
+
+// ---------------- UI更新系 ----------------
+function updateBattleUI() {
+  const p = battleState.player;
+  const c = battleState.cpu;
+
+  document.getElementById('cpu-hand-count').innerText = c.hand.length;
+  document.getElementById('cpu-deck-count').innerText = c.deck.length;
+  updatePointsUI('cpu-points', c.points);
+  document.getElementById('cpu-active').innerHTML = renderFieldCard(c.active, 'cpu');
+  c.bench.forEach((card, i) => {
+    document.getElementById('cpu-bench').children[i].innerHTML = renderFieldCard(card, 'cpu', true);
+  });
+  renderEnergyZone('cpu-energy-zone', c.energyZone);
+
+  document.getElementById('player-deck-count').innerText = p.deck.length;
+  updatePointsUI('player-points', p.points);
+  document.getElementById('player-active').innerHTML = renderFieldCard(p.active, 'player');
+  p.bench.forEach((card, i) => {
+    document.getElementById('player-bench').children[i].innerHTML = renderFieldCard(card, 'player', true);
+  });
+  renderEnergyZone('player-energy-zone', p.energyZone);
+
+  const handHtml = p.hand.map((card, idx) => {
+    return `<div class="w-16 h-24 card-wrap cursor-pointer hover:-translate-y-4 transition-transform shadow-xl shrink-0" onclick="handClick(${idx})">${generateCardHTML(card)}</div>`;
+  }).join('');
+  document.getElementById('player-hand').innerHTML = handHtml;
+
+  const indicator = document.getElementById('turn-indicator');
+  if(battleState.isPlayerTurn) {
+    indicator.innerText = `YOUR TURN (T${battleState.turn})`;
+    indicator.className = "font-bold text-xl text-green-400 text-glow";
+    document.getElementById('btn-end-turn').disabled = false;
+    document.getElementById('btn-end-turn').classList.remove('opacity-50');
+    
+    const canRetreat = p.active && p.active.energy >= p.active.retreat && p.bench.some(x=>x!==null);
+    document.getElementById('btn-retreat').disabled = !canRetreat;
+  } else {
+    indicator.innerText = `CPU TURN (T${battleState.turn})`;
+    indicator.className = "font-bold text-xl text-red-500 text-glow";
+    document.getElementById('btn-end-turn').disabled = true;
+    document.getElementById('btn-end-turn').classList.add('opacity-50');
+    document.getElementById('btn-retreat').disabled = true;
+  }
+}
+
+function renderFieldCard(card, side, isBench=false) {
+  if(!card) return `<div class="text-gray-500 text-xs font-bold flex items-center justify-center h-full w-full">${isBench ? '' : 'BATTLE'}</div>`;
+  
+  if (isBench) {
+    const hpPercent = card.currentHp / card.hp;
+    const hpColor = hpPercent > 0.5 ? 'text-green-500' : (hpPercent > 0.2 ? 'text-yellow-500' : 'text-red-500');
+    let energyDots = '';
+    for(let i=0; i<card.energy; i++) energyDots += '⭐';
+    
+    let visual = card.image || `<span class="text-3xl">${card.emoji}</span>`;
+
+    return `
+      <div class="relative w-full h-full flex flex-col items-center justify-center transition-transform bg-white/80 rounded border-2 border-gray-400">
+        <div class="absolute -top-3 bg-black/80 px-1 rounded text-[0.5rem] font-bold ${hpColor} whitespace-nowrap">HP ${card.currentHp}</div>
+        <div class="text-[0.4rem] font-bold drop-shadow-lg text-center leading-tight px-1 break-words w-full h-full flex items-center justify-center text-black">${visual}</div>
+        <div class="absolute -bottom-2 text-[0.4rem] bg-black/60 text-white px-1 rounded whitespace-nowrap">${energyDots}</div>
+      </div>
+    `;
+  } else {
+    return generateCardHTML(card, false, { currentHp: card.currentHp, energy: card.energy });
+  }
+}
+
+function updatePointsUI(elementId, points) {
+  const el = document.getElementById(elementId);
+  for(let i=0; i<3; i++) {
+    if(i < points) {
+      el.children[i].classList.add('opacity-30', 'bg-gray-500');
+      el.children[i].classList.remove(elementId==='cpu-points' ? 'bg-red-500' : 'bg-blue-500');
+    }
+  }
+}
+
+function renderEnergyZone(elementId, count) {
+  const el = document.getElementById(elementId);
+  el.innerHTML = '';
+  for(let i=0; i<count; i++) {
+    el.innerHTML += `<div class="w-6 h-6 rounded-full bg-yellow-300 border-2 border-white shadow-[0_0_10px_rgba(255,255,0,0.8)] flex items-center justify-center text-xs">⭐</div>`;
+  }
+}
+
+function closeActionMenu() {
+  document.getElementById('action-menu').classList.add('hidden');
+}
+
+// ---------------- プレイヤー操作 ----------------
+let selectedHandIndex = -1;
+
+function handClick(idx) {
+  if(!battleState.isPlayerTurn) return;
+  selectedHandIndex = idx;
+  const card = battleState.player.hand[idx];
+  
+  const menu = document.getElementById('action-menu');
+  menu.innerHTML = '';
+  
+  if(battleState.phase === 'setup') {
+    if(!battleState.player.active && card.stage === 0) {
+      menu.innerHTML = `<button class="bg-blue-600 px-3 py-1 rounded text-white text-sm" onclick="playToActiveFromHand()">バトル場に出す</button>`;
+    } else {
+      showToast("たね(Stage0)のカードをバトル場に出してください");
+      return;
+    }
+  } else {
+    let html = '';
+    if(card.stage === 0) {
+      if(battleState.player.bench.includes(null)) {
+        html += `<button class="bg-green-600 px-3 py-1 rounded text-white text-sm" onclick="playToBenchFromHand()">ベンチに出す</button>`;
+      }
+    } else if(card.stage === 1) {
+      const canEvolveActive = battleState.player.active && battleState.player.active.id === card.evolvesFrom;
+      if(canEvolveActive) html += `<button class="bg-purple-600 px-3 py-1 rounded text-white text-sm" onclick="evolveCard('active')">バトル場を進化</button>`;
+      
+      battleState.player.bench.forEach((c, i) => {
+        if(c && c.id === card.evolvesFrom) {
+          html += `<button class="bg-purple-600 px-3 py-1 rounded text-white text-sm" onclick="evolveCard('bench${i}')">ベンチ${i+1}を進化</button>`;
+        }
+      });
+    }
+    html += `<button class="bg-gray-600 px-3 py-1 rounded text-white text-sm" onclick="closeActionMenu()">キャンセル</button>`;
+    menu.innerHTML = html;
+  }
+  menu.classList.remove('hidden');
+}
+
+function playToActiveFromHand() {
+  const card = battleState.player.hand.splice(selectedHandIndex, 1)[0];
+  battleState.player.active = card;
+  closeActionMenu();
+  
+  if(battleState.phase === 'setup') {
+    cpuSetup();
+    battleState.phase = 'main';
+    startTurn();
+  } else {
+    updateBattleUI();
+  }
+}
+
+function playToBenchFromHand() {
+  const card = battleState.player.hand.splice(selectedHandIndex, 1)[0];
+  const emptyIdx = battleState.player.bench.indexOf(null);
+  battleState.player.bench[emptyIdx] = card;
+  closeActionMenu();
+  updateBattleUI();
+}
+
+function evolveCard(zone) {
+  const evCard = battleState.player.hand.splice(selectedHandIndex, 1)[0];
+  if(zone === 'active') {
+    evCard.currentHp = evCard.hp - (battleState.player.active.hp - battleState.player.active.currentHp);
+    evCard.energy = battleState.player.active.energy;
+    battleState.player.active = evCard;
+  } else {
+    const idx = parseInt(zone.replace('bench', ''));
+    evCard.currentHp = evCard.hp - (battleState.player.bench[idx].hp - battleState.player.bench[idx].currentHp);
+    evCard.energy = battleState.player.bench[idx].energy;
+    battleState.player.bench[idx] = evCard;
+  }
+  createEffect('✨', document.getElementById(`player-${zone}`));
+  closeActionMenu();
+  updateBattleUI();
+}
+
+function selectZone(zone) {
+  if(!battleState.isPlayerTurn || battleState.phase === 'setup') return;
+  const targetCard = zone === 'active' ? battleState.player.active : battleState.player.bench[parseInt(zone.replace('bench',''))];
+  if(!targetCard) return;
+
+  const menu = document.getElementById('action-menu');
+  let html = '';
+
+  if(battleState.player.energyZone > 0 && !battleState.player.energyAttachedThisTurn) {
+    html += `<button class="bg-yellow-500 px-3 py-1 rounded text-black font-bold text-sm" onclick="attachEnergy('${zone}')">エネをつける</button>`;
+  }
+
+  if(zone === 'active') {
+    targetCard.attacks.forEach((atk, i) => {
+      const canUse = targetCard.energy >= atk.cost;
+      html += `<button class="${canUse ? 'bg-red-600' : 'bg-gray-600'} px-3 py-1 rounded text-white text-sm" ${canUse?'':'disabled'} onclick="useAttack(${i})">${atk.name} (⭐${atk.cost})</button>`;
+    });
+  }
+
+  html += `<button class="bg-gray-600 px-3 py-1 rounded text-white text-sm" onclick="closeActionMenu()">閉じる</button>`;
+  menu.innerHTML = html;
+  menu.classList.remove('hidden');
+}
+
+function attachEnergy(zone) {
+  battleState.player.energyZone--;
+  battleState.player.energyAttachedThisTurn = true;
+  if(zone === 'active') battleState.player.active.energy++;
+  else battleState.player.bench[parseInt(zone.replace('bench',''))].energy++;
+  
+  createEffect('⭐', document.getElementById(`player-${zone}`));
+  closeActionMenu();
+  updateBattleUI();
+}
+
+// ---------------- バトルロジック ----------------
+function startTurn() {
+  const p = battleState.isPlayerTurn ? battleState.player : battleState.cpu;
+  drawCard(battleState.isPlayerTurn ? 'player' : 'cpu');
+  p.energyZone++;
+  p.energyAttachedThisTurn = false;
+  
+  updateBattleUI();
+  if(!battleState.isPlayerTurn) setTimeout(cpuTurn, 1000);
+}
+
+function actionEndTurn() {
+  if(!battleState.isPlayerTurn) return;
+  closeActionMenu();
+  battleState.isPlayerTurn = false;
+  startTurn();
+}
+
+function actionRetreat() {
+  const p = battleState.player;
+  if (!p.active) return;
+  
+  if(p.active.energy < p.active.retreat) {
+    showToast(`逃げるにはエネルギーが ${p.active.retreat} 個必要です！`);
+    return;
+  }
+  
+  const benchIdx = p.bench.findIndex(c => c !== null);
+  if(benchIdx === -1) {
+    showToast("交代できるベンチがいません！");
+    return;
+  }
+
+  p.active.energy -= p.active.retreat;
+  const temp = p.active;
+  p.active = p.bench[benchIdx];
+  p.bench[benchIdx] = temp;
+  
+  showToast(`${temp.name} は逃げた！`);
+  updateBattleUI();
+}
+
+function useAttack(atkIndex) {
+  closeActionMenu();
+  const attacker = battleState.player.active;
+  const defender = battleState.cpu.active;
+  const atk = attacker.attacks[atkIndex];
+  executeAttack('player', attacker, defender, atk);
+}
+
+function executeAttack(side, attacker, defender, atk) {
+  const attackerEl = document.getElementById(`${side}-active`);
+  const defenderSide = side === 'player' ? 'cpu' : 'player';
+  const defenderEl = document.getElementById(`${defenderSide}-active`);
+  
+  attackerEl.classList.add(side==='player' ? 'anim-attack' : 'anim-attack-cpu');
+  setTimeout(() => attackerEl.classList.remove('anim-attack', 'anim-attack-cpu'), 300);
+
+  setTimeout(() => {
+    let damage = atk.dmg;
+    if(damage > 0 && defender.weakness === attacker.type) damage += 20;
+    
+    if(damage > 0) {
+      defenderEl.classList.add('anim-damage', 'anim-shake');
+      setTimeout(() => defenderEl.classList.remove('anim-damage', 'anim-shake'), 400);
+      createHitEffect(defenderEl, damage);
+      defender.currentHp -= damage;
+    }
+    
+    if(atk.effect === 'heal10') attacker.currentHp = Math.min(attacker.hp, attacker.currentHp + 10);
+    if(atk.effect === 'heal20') attacker.currentHp = Math.min(attacker.hp, attacker.currentHp + 20);
+    if(atk.effect === 'heal30') attacker.currentHp = Math.min(attacker.hp, attacker.currentHp + 30);
+    if(atk.effect === 'self10') attacker.currentHp -= 10;
+    if(atk.effect === 'discard1' && battleState[side].energyZone > 0) battleState[side].energyZone--;
+
+    updateBattleUI();
+
+    setTimeout(() => {
+      checkFaint(defenderSide, defender);
+    }, 500);
+  }, 150);
+}
+
+function checkFaint(side, card) {
+  if(card.currentHp <= 0) {
+    createEffect('💥', document.getElementById(`${side}-active`), 3);
+    battleState[side].active = null;
+    
+    const winnerSide = side === 'player' ? 'cpu' : 'player';
+    battleState[winnerSide].points++;
+    updateBattleUI();
+    
+    if(battleState[winnerSide].points >= 3) {
+      endGame(winnerSide);
+      return;
+    }
+
+    setTimeout(() => {
+      const benchIdx = battleState[side].bench.findIndex(c => c !== null);
+      if(benchIdx !== -1) {
+        battleState[side].active = battleState[side].bench[benchIdx];
+        battleState[side].bench[benchIdx] = null;
+        updateBattleUI();
+        proceedTurn(winnerSide);
+      } else {
+        endGame(winnerSide);
+      }
+    }, 1000);
+  } else {
+    proceedTurn(side === 'player' ? 'cpu' : 'player');
+  }
+}
+
+function proceedTurn(currentSide) {
+  battleState.isPlayerTurn = currentSide === 'cpu';
+  battleState.turn++;
+  startTurn();
+}
+
+// ---------------- CPU ロジック ----------------
+async function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function cpuSetup() {
+  const c = battleState.cpu;
+  const basicIdx = c.hand.findIndex(card => card.stage === 0);
+  if(basicIdx !== -1) {
+    c.active = c.hand.splice(basicIdx, 1)[0];
+  } else {
+    const deckIdx = c.deck.findIndex(card => card.stage === 0);
+    if(deckIdx !== -1) c.active = c.deck.splice(deckIdx, 1)[0];
+  }
+}
+
+async function cpuTurn() {
+  const c = battleState.cpu;
+  const p = battleState.player;
+  if(battleState.phase === 'setup') return;
+
+  await delay(1000);
+
+  for(let i=c.hand.length-1; i>=0; i--) {
+    if(c.hand[i].stage === 0 && c.bench.includes(null)) {
+      const emptyIdx = c.bench.indexOf(null);
+      c.bench[emptyIdx] = c.hand.splice(i, 1)[0];
+      updateBattleUI();
+      await delay(500);
+    }
+  }
+
+  if(selectedCpuLevel >= 5) {
+    for(let i=c.hand.length-1; i>=0; i--) {
+      const card = c.hand[i];
+      if(card.stage === 1) {
+        if(c.active && c.active.id === card.evolvesFrom) {
+          card.currentHp = card.hp - (c.active.hp - c.active.currentHp);
+          card.energy = c.active.energy;
+          c.active = c.hand.splice(i, 1)[0];
+          createEffect('✨', document.getElementById('cpu-active'));
+          updateBattleUI();
+          await delay(500);
+          continue;
+        }
+        for(let j=0; j<3; j++) {
+          if(c.bench[j] && c.bench[j].id === card.evolvesFrom) {
+            card.currentHp = card.hp - (c.bench[j].hp - c.bench[j].currentHp);
+            card.energy = c.bench[j].energy;
+            c.bench[j] = c.hand.splice(i, 1)[0];
+            createEffect('✨', document.getElementById(`cpu-bench`));
+            updateBattleUI();
+            await delay(500);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if(c.energyZone > 0) {
+    if(c.active && selectedCpuLevel >= 1) {
+      c.active.energy++;
+      c.energyZone--;
+      createEffect('⭐', document.getElementById('cpu-active'));
+      updateBattleUI();
+      await delay(500);
+    }
+  }
+
+  if(c.active) {
+    let bestAtkIdx = -1;
+    let maxDmg = -1;
+    c.active.attacks.forEach((atk, i) => {
+      if(c.active.energy >= atk.cost && atk.dmg > maxDmg) {
+        maxDmg = atk.dmg;
+        bestAtkIdx = i;
+      }
+    });
+
+    if(bestAtkIdx !== -1) {
+      executeAttack('cpu', c.active, p.active, c.active.attacks[bestAtkIdx]);
+      return;
+    }
+  }
+
+  battleState.isPlayerTurn = true;
+  battleState.turn++;
+  startTurn();
+}
+
+// ---------------- エフェクト & 終了 ----------------
+function createEffect(emoji, targetEl, scale=1) {
+  if(!targetEl) return;
+  const rect = targetEl.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'hit-effect';
+  el.innerText = emoji;
+  el.style.left = `${rect.left + rect.width/2}px`;
+  el.style.top = `${rect.top + rect.height/2}px`;
+  el.style.fontSize = `${4 * scale}rem`;
+  document.getElementById('battle-effect-layer').appendChild(el);
+  setTimeout(() => el.remove(), 500);
+}
+
+function createHitEffect(targetEl, damage) {
+  createEffect('💥', targetEl);
+  const rect = targetEl.getBoundingClientRect();
+  const dmgEl = document.createElement('div');
+  dmgEl.className = 'absolute font-black text-red-500 text-5xl text-glow pointer-events-none z-50';
+  dmgEl.innerText = `-${damage}`;
+  dmgEl.style.left = `${rect.left + rect.width/2 - 20}px`;
+  dmgEl.style.top = `${rect.top + rect.height/2 - 20}px`;
+  dmgEl.style.animation = 'attack-slide 1s ease-out forwards, blast 1s forwards';
+  document.getElementById('battle-effect-layer').appendChild(dmgEl);
+  setTimeout(() => dmgEl.remove(), 1000);
+}
+
+function endGame(winnerSide) {
+  const resScreen = document.getElementById('battle-result');
+  resScreen.classList.remove('hidden');
+  resScreen.classList.add('flex');
+  
+  if(winnerSide === 'player') {
+    document.getElementById('result-title').innerText = "VICTORY!";
+    document.getElementById('result-title').className = "text-6xl font-black mb-4 text-blue-400 text-glow";
+    const reward = selectedCpuLevel * 10;
+    document.getElementById('result-reward').innerText = `+ ${reward} 🪙`;
+    playerState.coins += reward;
+    saveData();
+  } else {
+    document.getElementById('result-title').innerText = "DEFEAT...";
+    document.getElementById('result-title').className = "text-5xl font-black mb-4 text-red-500 text-center leading-tight";
+    document.getElementById('result-reward').innerText = `+ 10 🪙`;
+    playerState.coins += 10;
+    saveData();
+  }
+}
+
+function endBattle() {
+  battleState = null;
+  updateUI();
+  nav('home');
+}
+
+/* ========================================================================
+   初期化
+======================================================================== */
+window.onload = () => {
+  loadData();
+};
+</script>
+</body>
+</html>
